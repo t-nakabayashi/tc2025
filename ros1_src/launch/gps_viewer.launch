@@ -1,0 +1,49 @@
+<?xml version="1.0"?>
+<!-- GPS可視化専用の起動ファイル。RViz表示やMatplotlibによる描画を切り替え可能。 -->
+<launch>
+  <!-- NavSatFixを購読するトピック名。ubloxドライバ以外を使う場合は適宜変更してください -->
+  <arg name="topic" default="/ublox/fix"/>
+  <!-- RVizで利用する座標系名。必要に応じてmapやodomなど他フレームへ付け替え -->
+  <arg name="frame_id" default="gps_local"/>
+  <!-- 静的TFの親フレーム。地図座標とGPSローカル座標の関係を把握している場合に編集 -->
+  <arg name="parent_frame" default="map"/>
+  <!-- static_transform_publisherで使用する位置・姿勢パラメータ（XYZRPY）。実際のオフセットに合わせて調整 -->
+  <arg name="offset_x" default="0"/>
+  <arg name="offset_y" default="0"/>
+  <arg name="offset_z" default="0"/>
+  <arg name="offset_roll" default="0"/>
+  <arg name="offset_pitch" default="0"/>
+  <arg name="offset_yaw" default="0"/>
+  <!-- RViz用Markerの大きさと記録点数を制御するパラメータ -->
+  <arg name="marker_scale" default="0.3"/>
+  <arg name="max_points" default="20000"/>
+  <!-- Matplotlibのリアルタイム描画を同時に有効化するかどうか -->
+  <arg name="enable_matplotlib" default="false"/>
+  <!-- RVizへのMarker / Path送信を無効化したい場合のスイッチ -->
+  <arg name="publish_path" default="true"/>
+  <arg name="publish_marker" default="true"/>
+  <!-- 画面更新周期[Hz]。処理負荷に応じて調整 -->
+  <arg name="refresh_rate" default="5.0"/>
+  <!-- RTK状態判定に利用するNavPVTトピックと有効期限[s] -->
+  <arg name="navpvt_topic" default="/ublox/navpvt"/>
+  <arg name="navpvt_timeout" default="1.0"/>
+
+  <!-- RVizでGPS座標を扱いやすくするため、静的TFを用いてローカル座標系を生成 -->
+  <node pkg="tf" type="static_transform_publisher"
+        name="tf_parent2gps_local"
+        args="$(arg offset_x) $(arg offset_y) $(arg offset_z) $(arg offset_roll) $(arg offset_pitch) $(arg offset_yaw) $(arg parent_frame) $(arg frame_id) 10" />
+
+  <!-- NavSatFixを受信し、PathとMarkerへ変換してRVizへ配信するノード -->
+  <node pkg="tc2025" type="gps_trajectory_viewer.py" name="gps_trajectory_viewer" output="screen">
+    <param name="topic" value="$(arg topic)"/>
+    <param name="frame_id" value="$(arg frame_id)"/>
+    <param name="marker_scale" value="$(arg marker_scale)"/>
+    <param name="max_points" value="$(arg max_points)"/>
+    <param name="enable_matplotlib" value="$(arg enable_matplotlib)"/>
+    <param name="publish_path" value="$(arg publish_path)"/>
+    <param name="publish_marker" value="$(arg publish_marker)"/>
+    <param name="refresh_rate" value="$(arg refresh_rate)"/>
+    <param name="navpvt_topic" value="$(arg navpvt_topic)"/>
+    <param name="navpvt_timeout" value="$(arg navpvt_timeout)"/>
+  </node>
+</launch>

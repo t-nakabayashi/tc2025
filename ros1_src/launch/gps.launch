@@ -1,0 +1,8 @@
+<!-- ~/catkin_ws/src/my_launch/ublox_node.launch -->
+<launch>
+  <arg name="device" default="/dev/ttyACM0"/>
+  <node pkg="ublox_gps" type="ublox_gps" name="ublox" output="screen">
+    <param name="device" value="$(arg device)"/>
+    <rosparam command="load" file="$(find tc2025)/config/zed_f9p.yaml"/>
+  </node>
+</launch>
