@@ -1,0 +1,21 @@
+# Request
+# - prev_index/next_index: 現行Route上の隣接ペア（再訪に耐えるため index で指示）
+# - prev_wp_label/next_wp_label: index と label の整合検証用（不一致ならエラー）
+# - current_pose: 現在位置（参考）。必要に応じて再計画の初期条件に用いる。
+# - route_version: manager が現在配信中の version。planner は一致を必須チェック。
+# - reason: 更新理由（可読ログ）
+
+int32 prev_index
+int32 next_index
+string prev_wp_label
+string next_wp_label
+geometry_msgs/PoseStamped current_pose
+int32 route_version
+string reason
+
+---
+# Response
+bool success
+string message
+route_msgs/Route route
+

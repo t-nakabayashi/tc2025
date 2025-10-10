@@ -15,13 +15,13 @@
 
 ### ROS2 (colcon)
 
-1. 既存のリンクやディレクトリがあれば削除します。
+1. 既存のリンクやディレクトリがあれば削除します。（※削除して問題ないかよく確認してから実施してください）
    ```bash
-   rm -rf ~/ros2_ws/src/tc2025_ros2
+   rm -rf ~/ros2_ws/src
    ```
-2. このリポジトリの `ros2_src` を `~/ros2_ws/src/tc2025_ros2` へリンクします。
+2. このリポジトリの `ros2_src` を `~/ros2_ws/src` へリンクします。
    ```bash
-   ln -s /home/(user name)/ros/tc2025/ros2_src ~/ros2_ws/src/tc2025_ros2
+   ln -s /home/(user name)/ros/tc2025/ros2_src ~/ros2_ws/src
    ```
 
 ## 使い方
@@ -41,7 +41,7 @@ roslaunch tc2025 <launchファイル名>
 cd ~/ros2_ws
 colcon build
 source install/setup.bash
-ros2 run tc2025_ros2 <ノード名>
+ros2 run <パッケージ名> <ノード名>
 ```
 
-各種設定ファイルやスクリプトは今後 `tc2025` / `tc2025_ros2` 配下に追加していきます。
+パッケージや各種設定ファイル、スクリプトは今後 `tc2025` / `tc2025_ros2` 配下に追加していきます。
