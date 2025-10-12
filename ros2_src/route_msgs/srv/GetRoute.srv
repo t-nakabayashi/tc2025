@@ -1,0 +1,11 @@
+# Request
+string start_label
+string goal_label
+string[] checkpoint_labels
+
+---
+# Response
+bool success
+string message
+route_msgs/Route route
+

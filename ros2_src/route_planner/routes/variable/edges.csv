@@ -1,0 +1,5 @@
+source,target,waypoint_list,reversible
+C100,C7,variable/segments/edge_C100_C7.csv,0
+C7,C102,variable/segments/edge_C7_C102.csv,0
+C7,C100,variable/segments/edge_C100_C7.csv,0
+C102,C7,variable/segments/edge_C7_C102.csv,0
