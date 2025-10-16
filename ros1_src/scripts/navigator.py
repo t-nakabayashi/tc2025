@@ -5,7 +5,6 @@ from geometry_msgs.msg import PoseWithCovarianceStamped, PoseStamped, Twist, Poi
 from nav_msgs.msg import Odometry
 from visualization_msgs.msg import Marker
 from sensor_msgs.msg import LaserScan
-from move_base_msgs.msg import MoveBaseActionGoal  # 追加
 import math
 import threading
 import os
@@ -52,7 +51,7 @@ class TimeOptimalController:
         # サブスクライバの設定
         rospy.Subscriber('/ypspur_ros/odom', Odometry, self.odom_callback)
         rospy.Subscriber('/amcl_pose', PoseWithCovarianceStamped, self.pose_callback)
-        rospy.Subscriber('/move_base/goal', MoveBaseActionGoal, self.goal_callback)  # 修正
+        rospy.Subscriber('/active_target', PoseStamped, self.goal_callback)  # ROS2 route_followerからの目標
         rospy.Subscriber('/scan_livox_front_low_move', LaserScan, self.laser_scan_callback)
 
         # パブリッシャの設定
@@ -88,9 +87,10 @@ class TimeOptimalController:
     def goal_callback(self, msg):
         """
         現在のゴールを受け取って、目標位置姿勢を更新します。
+        ROS2 route_followerの/active_target (PoseStamped)を受信
         """
-        with self.lock: 
-            self.current_goal = msg.goal.target_pose.pose  # 修正
+        with self.lock:
+            self.current_goal = msg.pose  # PoseStampedから直接Poseを取得
 
     def laser_scan_callback(self, msg):
         """

@@ -1,0 +1,6 @@
+<launch>
+    <!-- navigatorノードの定義 -->
+    <node pkg="tc2025" name="navigator" type="navigator.py" output="screen" >
+    </node>
+
+</launch>

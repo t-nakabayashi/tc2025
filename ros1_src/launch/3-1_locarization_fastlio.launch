@@ -16,7 +16,8 @@
 	<param name="runtime_pos_log_enable" type="bool" value="0" />
     <node pkg="fast_lio" type="fastlio_mapping" name="laserMapping" output="screen" />
 	<!--param name="use_sim_time" value="true"/-->
-	<node pkg="tf" type="static_transform_publisher" name="tf_base2mid360_new2" args="-0.425 0 1.005 0 0 0 /base_link /mid360_frame_new 50" />
+	<node pkg="tf" type="static_transform_publisher" name="tf_base2mid360_new2" args="0 0 1.005 0 0 0 /base_link /mid360_frame_new 50" />
+	<!--node pkg="tf" type="static_transform_publisher" name="tf_base2mid360_new2" args="-0.425 0 1.005 0 0 0 /base_link /mid360_frame_new 50" /-->
 	<!--node pkg="tf" type="static_transform_publisher" name="body2base_link" args="0 0 0 0 0 0 /body /base_link 50" /-->
 	<!--node pkg="tf" type="static_transform_publisher" name="odom2camera_init" args="0 0 0 0 0 0 /odom /camera_init 50" /-->
 
@@ -24,7 +25,7 @@
 	<rosparam param="footprint" ns="/move_base/global_costmap">[[0.05,-0.1], [0.05,0.1], [-0.3,0.1], [-0.3,-0.1]]</rosparam>
 	<arg name="waypoint_file" default="$(find fast_lio)/PCD/waypoint.csv" />
 	<arg name="map_file_move" default="$(find fast_lio)/PCD/scans_cleaned_2d.yaml" />
-	<arg name="pcd_file" default="$(find fast_lio)/PCD/scans_light_noground_edit.pcd" />
+	<arg name="pcd_file" default="$(find fast_lio)/PCD/scans_light.pcd" />
 	<node respawn="true" name="map_server_move" pkg="map_server" type="map_server" args="$(arg map_file_move)">
 			<remap from="map" to="/map"/>
 	</node>

@@ -5,8 +5,8 @@
 
 
 	<node pkg="ypspur_ros" type="ypspur_ros" name="ypspur_ros" respawn="true">
-		<param name="port" value="/dev/ttyACM_YP" />
-		<param name="param_file" value="/home/nakaba/icart-middle.param" />
+		<param name="port" value="/dev/ttyACM0" />
+		<param name="param_file" value="/home/nkb/icart-middle.param" />
 		<param name="publish_odom_tf" value="false" />
 	</node>
 
@@ -49,6 +49,15 @@
     <param name="publish_rate" value="20.0" />
   </node>
 
+  <!-- Waypoint input ノード -->
+  <node pkg="tc2025" type="waypoint_input.py" name="waypoint_input" output="screen" launch-prefix="xterm -e" />
+
+  <!-- ublox GPS -->
+  <include file="$(find ublox_gps)/launch/ublox_device.launch">
+    <arg name="node_name" value="ublox" />
+    <arg name="param_file_dir" value="$(find ublox_gps)/config" />
+    <arg name="param_file_name" value="zed_f9p_rtk" />
+  </include>
 
 	<!-- MID360 -->
 	<!--user configure parameters for ros start-->
