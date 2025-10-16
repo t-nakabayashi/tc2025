@@ -26,7 +26,7 @@ import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy, HistoryPolicy
 from std_msgs.msg import Header, Bool
-from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped
 from route_msgs.msg import Route, Waypoint, FollowerState  # type: ignore
 
 
@@ -92,7 +92,10 @@ class RouteFollower(Node):
 
         # ===== Publisher / Subscriber =====
         self.sub_route = self.create_subscription(Route, "/active_route", self._on_route, self.qos_tl)
-        self.sub_pose = self.create_subscription(PoseStamped, "/amcl_pose", self._on_pose, self.qos_vol)
+        # amcl_poseはPoseWithCovarianceStampedで配信される
+        self.sub_pose = self.create_subscription(
+            PoseWithCovarianceStamped, "/amcl_pose", self._on_pose, self.qos_vol
+        )
         self.sub_manual = self.create_subscription(Bool, "/manual_start", self._on_manual_start, self.qos_vol)
 
         self.pub_target = self.create_publisher(PoseStamped, "/active_target", self.qos_tl)
@@ -125,8 +128,12 @@ class RouteFollower(Node):
             return
         self._pending_route = msg
 
-    def _on_pose(self, msg: PoseStamped) -> None:
-        self._current_pose = msg
+    def _on_pose(self, msg: PoseWithCovarianceStamped) -> None:
+        # PoseWithCovarianceStampedをPoseStampedに変換
+        pose_stamped = PoseStamped()
+        pose_stamped.header = msg.header
+        pose_stamped.pose = msg.pose.pose
+        self._current_pose = pose_stamped
 
     def _on_manual_start(self, msg: Bool) -> None:
         if msg.data:
@@ -178,6 +185,13 @@ class RouteFollower(Node):
                 self._publish_state()
                 return
             target_wp = self._wp_list[self._index]
+            # 現在位置から次のウェイポイントまでの距離を出力
+            dx = float(self._current_pose.pose.position.x) - float(target_wp.pose.position.x)
+            dy = float(self._current_pose.pose.position.y) - float(target_wp.pose.position.y)
+            dist = math.hypot(dx, dy)
+            self.get_logger().info(
+                f"Distance to waypoint[{self._index}] '{target_wp.label}': {dist:.3f}m (threshold: {self.get_parameter('arrival_threshold').value}m)"
+            )
             if self._reached(self._current_pose, target_wp, self.get_parameter("arrival_threshold").value):
                 # --- line_stop: 到達したwaypoint情報を出す ---
                 if getattr(target_wp, "line_stop", False):
