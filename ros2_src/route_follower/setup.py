@@ -22,7 +22,7 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'route_follower = route_follower.route_follower:main',
+            'route_follower = route_follower.route_follower_node:main',
         ],
     },
 )

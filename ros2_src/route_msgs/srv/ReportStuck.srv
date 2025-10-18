@@ -1,0 +1,15 @@
+# route_follower → route_manager への滞留・回避失敗報告（Phase2仕様）
+
+int32 route_version
+int32 current_index
+string current_wp_label
+geometry_msgs/Pose current_pose_map
+string reason
+uint32 avoid_trial_count
+bool last_hint_blocked
+float32 last_applied_offset_m
+---
+uint8 decision  # 1=REPLAN, 2=SKIP, 3=FAILED
+builtin_interfaces/Duration waiting_deadline
+float32 offset_hint
+string note

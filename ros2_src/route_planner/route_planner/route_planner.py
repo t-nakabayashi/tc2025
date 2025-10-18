@@ -408,7 +408,7 @@ class RoutePlannerNode(Node):
         self.current_route_origins: List[WaypointOrigin] = []   # current_route.waypoints と同長
         self.route_version: int = 0                             # Route.msgのversion(int32)に対応
         self.current_block_name: Optional[str] = None           # 累積封鎖の対象ブロック名
-        self.closed_edges: Set[frozenset] = set()               # {frozenset({u,v}), ...}
+        self.closed_edges: Set[frozenset] = set()               # {frozenset({u,v}), }
         self.last_request_checkpoints: Set[str] = set()         # GetRoute時に追加されたチェックポイント
         self.visited_checkpoints_hist: Dict[str, Set[str]] = {} # ブロック名 -> 訪問済みチェックポイント（永続）
 
@@ -731,6 +731,8 @@ class RoutePlannerNode(Node):
             sliced, start_offset = slice_by_labels(route_wps, request.start_label, request.goal_label)
             # origins も同じ範囲に揃える
             origins = origins[start_offset:start_offset + len(sliced)]
+            # インデックスを0..N-1で再採番
+            indexing(sliced)
             # 総距離を算出
             total_distance = calc_total_distance(sliced)
             # スライス後のインデックス系に合わせて補正
@@ -780,7 +782,6 @@ class RoutePlannerNode(Node):
             response.success = True
             response.message = ""
             response.route = route
-            route = indexing(route.waypoints)
             return response
 
         except Exception as e:
@@ -788,17 +789,23 @@ class RoutePlannerNode(Node):
             response.success = False
             response.message = str(e)
             response.route = Route()
-            route = indexing(route.waypoints)
-        return response
+            return response
 
     def handle_update_route(self, request: UpdateRoute.Request, response: UpdateRoute.Response) -> UpdateRoute.Response:
         """経路封鎖リルートの実行。仮想エッジ（current→prev→U）を先頭に挿入し、その後に新可変ルートと後続ブロックを連結する。"""
         try:
             # 0) 前提検証
             if self.current_route is None or not self.current_route.waypoints:
-                raise RuntimeError("No current route in server.")
+                response.success = False
+                response.message = "No current route in server."
+                response.route = Route()
+                return response
             if request.route_version != self.current_route.version:
-                raise RuntimeError("Route version mismatch.")
+                self.get_logger().error("[UpdateRoute] Route version mismatch.")
+                response.success = False
+                response.message = "Route version mismatch."
+                response.route = self.current_route or Route()
+                return response
 
             wps = self.current_route.waypoints
             origins = self.current_route_origins
@@ -832,8 +839,12 @@ class RoutePlannerNode(Node):
             if block is None:
                 raise RuntimeError(f"Block not found: {block_name}")
             if block["type"] == "fixed":
-                # 固定ブロックはリルート不可（封鎖検知時はエラー返却）
-                raise RuntimeError("Closure in fixed block (not reroutable).")
+                # 固定ブロックはリルート不可（封鎖検知時はエラー返却。ただしノードは継続）
+                self.get_logger().warn("Closure in fixed block (not reroutable).")
+                response.success = False
+                response.message = "Closure in fixed block (not reroutable)."
+                response.route = self.current_route or Route()
+                return response
 
             # 3) 現在走行中エッジの (U,V) と、prev のエッジ内位置を特定
             u_node = prev_origin.edge_u
@@ -1069,7 +1080,6 @@ class RoutePlannerNode(Node):
             response.success = True
             response.message = ""
             response.route = new_route
-            route = indexing(route.waypoints)
             return response
 
         except Exception as e:
@@ -1077,7 +1087,6 @@ class RoutePlannerNode(Node):
             response.success = False
             response.message = str(e)
             response.route = Route()
-            route = indexing(route.waypoints)
             return response
 
     # ===== 内部補助 =====================================================
@@ -1166,7 +1175,7 @@ class RoutePlannerNode(Node):
 
         # Uは seg_u_first[0] に対応する（末尾は V）
         # prev→U 方向に向かう配列は seg_u_first[0:prev_idx_u_first+1] を逆順にせず、
-        # current→prev→ ... →U となるように、current, prev, seg_u_first[prev_idx_u_first-1 ... 0] を連結する。
+        # current→prev→  →U となるように、current, prev, seg_u_first[prev_idx_u_first-1  0] を連結する。
         virtual: List[Waypoint] = []
         # current を先頭に追加（Waypoint化）
         current_wp = self._make_waypoint_from_pose(current_pose, label="current")

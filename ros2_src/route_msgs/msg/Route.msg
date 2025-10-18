@@ -9,4 +9,5 @@ int32 version
 float32 total_distance
 sensor_msgs/Image route_image
 route_msgs/Waypoint[] waypoints
-
+int32 start_index
+string start_wp_label
