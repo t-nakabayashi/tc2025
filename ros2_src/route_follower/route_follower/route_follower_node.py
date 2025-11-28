@@ -91,6 +91,7 @@ class RouteFollowerNode(Node):
         self.declare_parameter("start_immediately", True)
         self.declare_parameter("target_frame", "map")
         self.declare_parameter("avoid_back_offset_m", 0.5)
+        self.declare_parameter("road_blocked_confirmation_sec", 5.0)
 
         arrival_threshold = float(self.get_parameter("arrival_threshold").value)
         control_rate = float(self.get_parameter("control_rate_hz").value)
@@ -107,6 +108,14 @@ class RouteFollowerNode(Node):
         if avoid_back_offset < 0.0:
             self.get_logger().warn("avoid_back_offset_m が負のため0.0mを使用します。")
             avoid_back_offset = 0.0
+        road_blocked_confirmation = float(
+            self.get_parameter("road_blocked_confirmation_sec").value
+        )
+        if road_blocked_confirmation < 0.0:
+            self.get_logger().warn(
+                "road_blocked_confirmation_sec が負のため0.0秒を使用します。",
+            )
+            road_blocked_confirmation = 0.0
 
         self.core = FollowerCore(self.get_logger())
         self.core.arrival_threshold = arrival_threshold
@@ -114,6 +123,7 @@ class RouteFollowerNode(Node):
         self.core.republish_target_hz = 1.0 / resend_interval
         self.core.start_immediately = self.start_immediately
         self.core.avoid_back_offset_m = avoid_back_offset
+        self.core.road_blocked_confirmation_sec = road_blocked_confirmation
         self.get_logger().info("route_follower_node started.")
 
         # QoS設定

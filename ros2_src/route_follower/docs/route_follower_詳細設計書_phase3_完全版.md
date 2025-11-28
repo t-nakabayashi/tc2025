@@ -63,6 +63,7 @@ obstacle_monitor、route_manager との連携仕様を含めた完全設計情�
 | arrival_threshold | float | 0.6 | waypoint到達判定距離[m] |
 | control_rate_hz | float | 20.0 | 制御周期[Hz] |
 | stagnation_duration_sec | float | 15.0 | 滞留成立までの継続時間[s] |
+| road_blocked_confirmation_sec | float | 5.0 | road_blocked=true が滞留理由として有効になるまでの最小継続時間[s] |
 | window_sec | float | 2.0 | 滞留検知窓幅[s] |
 | progress_epsilon_m | float | 0.1 | 進捗距離閾値[m] |
 | min_speed_mps | float | 0.05 | 速度閾値[m/s] |
@@ -143,6 +144,11 @@ obstacle_monitor、route_manager との連携仕様を含めた完全設計情�
 | ERROR | 異常終了 |
 
 ### 6.2 状態遷移図（概要）
+
+滞留検知をトリガとした WAITING_REROUTE 遷移では、`road_blocked` が true のまま
+`road_blocked_confirmation_sec` 以上継続している場合のみ滞留理由を
+`road_blocked` として採用する。誤検知が短時間で取り消された場合は RUNNING に
+留まり、不要な reroute 要求を抑制する。
 
 ```
 IDLE → RUNNING → WAITING_STOP → RUNNING/FINISHED
@@ -297,6 +303,8 @@ IDLE → RUNNING → WAITING_STOP → RUNNING/FINISHED
 ## 14. 結論
 本詳細設計に基づき、`route_follower_node.py` を実装した。
 Phase3では、滞留理由コードの拡張（`reason_code` / `reason_detail`）と road_blocked 通報の扱い整理を完了し、
-route_manager との連携で経路封鎖時の再開条件を明確化した。
+road_blocked が短時間で false に戻った場合に reroute を抑止する継続時間確認
+(`road_blocked_confirmation_sec`) を導入した。route_manager との連携で経路封鎖
+時の再開条件を明確化した。
 
 以上。

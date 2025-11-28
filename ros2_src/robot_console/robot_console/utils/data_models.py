@@ -118,6 +118,9 @@ class NodeLaunchState:
     display_name: str = ""
     package: str = ""
     launch_file: str = ""
+    alternate_launch_file: Optional[str] = None
+    launch_toggle_label: Optional[str] = None
+    use_alternate_launch: bool = False
     param_argument: Optional[str] = None
     available_params: List[str] = field(default_factory=list)
     selected_param: Optional[str] = None
@@ -142,6 +145,7 @@ class GuiCommandType(Enum):
     ROAD_BLOCKED = auto()
     OBSTACLE_HINT_OVERRIDE = auto()
     OBSTACLE_HINT_STOP = auto()
+    FRAME_IMAGE_PATH = auto()
     LAUNCH_NODE = auto()
     STOP_NODE = auto()
     LAUNCH_ALL = auto()
@@ -149,6 +153,7 @@ class GuiCommandType(Enum):
     UPDATE_PARAM = auto()
     TOGGLE_SIMULATOR = auto()
     UPDATE_OVERRIDE = auto()
+    SWITCH_LAUNCH_FILE = auto()
 
 
 @dataclass
@@ -216,6 +221,9 @@ def clone_launch_state(state: NodeLaunchState) -> NodeLaunchState:
         display_name=state.display_name,
         package=state.package,
         launch_file=state.launch_file,
+        alternate_launch_file=state.alternate_launch_file,
+        launch_toggle_label=state.launch_toggle_label,
+        use_alternate_launch=state.use_alternate_launch,
         param_argument=state.param_argument,
         available_params=list(state.available_params),
         selected_param=state.selected_param,

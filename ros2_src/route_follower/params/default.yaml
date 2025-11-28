@@ -5,4 +5,4 @@ route_follower:
     resend_interval_sec: 1.0
     start_immediately: false
     target_frame: "map"
-    avoid_back_offset_m: 0.5
+    avoid_back_offset_m: 0.75

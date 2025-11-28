@@ -291,6 +291,8 @@ class UiMain:
             value='状態: front_blocked=OFF 前方距離:0.00m 左:+0.00m 右:+0.00m 更新: --:--:--'
         )
         self._event_banner = tk.StringVar(value='')
+        self._frame_image_path_var = tk.StringVar(value='')
+        self._frame_image_status_var = tk.StringVar(value='最終送信: --:--:--')
         self._obstacle_override_active = False
         self._obstacle_toggle_btn: Optional[ttk.Button] = None
         self._image_warning_label: Optional[ttk.Label] = None
@@ -882,6 +884,29 @@ class UiMain:
         )
         notebook.add(road_tab, text='road_blocked')
 
+        frame_image_tab = ttk.Frame(notebook, padding=6)
+        frame_image_tab.columnconfigure(0, weight=1)
+        path_row = ttk.Frame(frame_image_tab)
+        path_row.columnconfigure(0, weight=1)
+        path_row.grid(row=0, column=0, sticky='ew')
+        ttk.Entry(path_row, textvariable=self._frame_image_path_var).grid(
+            row=0,
+            column=0,
+            sticky='ew',
+        )
+        ttk.Button(
+            path_row,
+            text='frame_image_path を送信',
+            command=self._on_send_frame_image_path,
+        ).grid(row=0, column=1, sticky='e', padx=(8, 0))
+        ttk.Label(frame_image_tab, textvariable=self._frame_image_status_var).grid(
+            row=1,
+            column=0,
+            sticky='w',
+            pady=(6, 0),
+        )
+        notebook.add(frame_image_tab, text='frame_image_path')
+
         self._apply_imagetk_warning_if_needed(control_frame)
 
     def _build_launch_sidebar(self, parent: ttk.Frame) -> None:
@@ -974,6 +999,51 @@ class UiMain:
                     }
                     current_row += 1
 
+            launch_mode_var: Optional[tk.Variable] = tk.BooleanVar(
+                value=state.use_alternate_launch
+            )
+            if state.alternate_launch_file:
+                if profile_id == 'yolo_detector':
+                    launch_mode_var = tk.StringVar(
+                        value='yolo' if state.use_alternate_launch else 'yolo_ncnn'
+                    )
+                    mode_frame = ttk.Frame(card)
+                    mode_frame.grid(row=current_row, column=0, sticky='w', pady=(2, 0))
+
+                    def _on_change_mode(*_args: object) -> None:
+                        self._core.update_launch_file_selection(
+                            profile_id, launch_mode_var.get() == 'yolo'
+                        )
+
+                    for column, (label, value) in enumerate(
+                        (('yolo_ncnn', 'yolo_ncnn'), ('yolo', 'yolo')),
+                        start=0,
+                    ):
+                        ttk.Radiobutton(
+                            mode_frame,
+                            text=label,
+                            value=value,
+                            variable=launch_mode_var,
+                            command=_on_change_mode,
+                        ).grid(row=0, column=column, sticky='w', padx=(0, 8))
+                    current_row += 1
+                else:
+                    toggle_label = state.launch_toggle_label or '別モードを使用'
+                    launch_mode_var = tk.BooleanVar(value=state.use_alternate_launch)
+                    callback = self._create_launch_toggle_callback(
+                        profile_id, launch_mode_var
+                    )
+                    chk_launch = ttk.Checkbutton(
+                        card,
+                        text=toggle_label,
+                        variable=launch_mode_var,
+                        command=callback,
+                    )
+                    chk_launch.grid(row=current_row, column=0, sticky='w')
+                    current_row += 1
+            else:
+                launch_mode_var = None
+
             simulator_var = tk.BooleanVar(value=state.simulator_enabled)
             if state.simulator_launch_file:
                 chk = ttk.Checkbutton(
@@ -1010,11 +1080,18 @@ class UiMain:
                 'sim': simulator_var,
                 'combo': combo,
                 'overrides': override_widgets,
+                'launch_toggle': launch_mode_var,
             }
 
     def _create_override_callback(self, profile_id: str, key: str, var: tk.StringVar):
         def _callback(*_args: object) -> None:
             self._core.update_launch_override(profile_id, key, var.get())
+
+        return _callback
+
+    def _create_launch_toggle_callback(self, profile_id: str, var: tk.BooleanVar):
+        def _callback(*_args: object) -> None:
+            self._core.update_launch_file_selection(profile_id, var.get())
 
         return _callback
 
@@ -1106,6 +1183,7 @@ class UiMain:
             'route_follower',
             'robot_navigator',
             'obstacle_monitor',
+            'yolo_detector',
         ]
 
         count = sum(1 for pid in ordered if pid in snapshot.launch_states)
@@ -1176,6 +1254,7 @@ class UiMain:
             'route_follower',
             'robot_navigator',
             'obstacle_monitor',
+            'yolo_detector',
         ]
 
         count = sum(1 for pid in ordered if pid in snapshot.launch_states)
@@ -1221,6 +1300,12 @@ class UiMain:
     def _on_send_road(self) -> None:
         value = bool(self._road_value.get())
         self._core.request_road_blocked(value)
+
+    def _on_send_frame_image_path(self) -> None:
+        path = self._frame_image_path_var.get()
+        self._core.request_frame_image_path(path)
+        timestamp = datetime.now(timezone.utc)
+        self._frame_image_status_var.set(f"最終送信: {_format_time(timestamp)}")
 
     def _on_toggle_obstacle_override(self) -> None:
         if self._obstacle_override_active:
@@ -1711,6 +1796,12 @@ class UiMain:
             sim_var = widgets['sim']  # type: ignore[assignment]
             if isinstance(sim_var, tk.BooleanVar):
                 sim_var.set(state.simulator_enabled)
+            launch_toggle_var = widgets.get('launch_toggle')  # type: ignore[index]
+            if isinstance(launch_toggle_var, tk.BooleanVar):
+                launch_toggle_var.set(state.use_alternate_launch)
+            elif isinstance(launch_toggle_var, tk.StringVar):
+                desired_value = 'yolo' if state.use_alternate_launch else 'yolo_ncnn'
+                launch_toggle_var.set(desired_value)
             combo_widget = widgets.get('combo')  # type: ignore[index]
             if isinstance(combo_widget, ttk.Combobox):
                 current_values = tuple(combo_widget['values'])

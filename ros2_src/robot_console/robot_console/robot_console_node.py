@@ -10,7 +10,7 @@ import rclpy
 from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped, Twist
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
-from std_msgs.msg import Bool, Int32
+from std_msgs.msg import Bool, Int32, String
 
 from route_msgs.msg import (
     FollowerState,
@@ -53,6 +53,9 @@ class RobotConsoleNode(Node):
         self._road_pub = self.create_publisher(Bool, 'road_blocked', 10)
         self._obstacle_hint_pub = self.create_publisher(
             ObstacleAvoidanceHint, 'obstacle_avoidance_hint', 10
+        )
+        self._frame_image_path_pub = self.create_publisher(
+            String, '/frame_image_path', 10
         )
 
         self.create_subscription(RouteState, 'route_state', self._core.update_route_state, 10)
@@ -102,6 +105,9 @@ class RobotConsoleNode(Node):
                 msg = Bool(data=bool(command.payload.get('value', False)))
                 self._road_pub.publish(msg)
                 self._core.update_road_blocked(msg, source='console')
+            elif command.command_type == GuiCommandType.FRAME_IMAGE_PATH:
+                msg = String(data=str(command.payload.get('value', '')))
+                self._frame_image_path_pub.publish(msg)
             elif command.command_type == GuiCommandType.OBSTACLE_HINT_OVERRIDE:
                 self._start_obstacle_override(command.payload)
             elif command.command_type == GuiCommandType.OBSTACLE_HINT_STOP:

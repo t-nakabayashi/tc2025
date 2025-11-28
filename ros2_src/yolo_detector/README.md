@@ -7,8 +7,10 @@ ROS2でUSBカメラの画像をYOLOモデルで物体検出するパッケージ
 - `/usb_cam/image_raw` トピックから画像をサブスクライブ
 - YOLOモデル（PyTorch / NCNN）を使用してCPUで物体検出
 - **NCNN版は通常のPyTorch版より高速（推奨）**
-- 1秒に1回の間隔で検出処理を実行
+- detection_interval間隔で推論を実行（タイマー周期に直接使用）
 - 検出結果をターミナルに表示
+- 検出結果付き画像を`yolo_detector/image_det`でPublish
+- Detection2DArray形式の検出結果を`yolo_detector/detections`でPublish
 
 ## 必要な依存関係
 
@@ -79,7 +81,7 @@ ros2 run yolo_detector yolo_node --ros-args \
 ```bash
 ros2 run yolo_detector yolo_node --ros-args \
   -p image_topic:=/usb_cam/image_raw \
-  -p detection_interval:=1.0 \
+  -p detection_interval:=0.5 \
   -p model_path:=/home/nkb/ros2_ws/src/yolo_detector/models/best.pt \
   -p image_size:=256 \
   -p confidence_threshold:=0.5
@@ -92,8 +94,8 @@ ros2 run yolo_detector yolo_node --ros-args \
 - `image_topic` (string, default: "/usb_cam/image_raw")
   - サブスクライブする画像トピック名
 
-- `detection_interval` (double, default: 1.0)
-  - 検出処理の実行間隔（秒）
+- `detection_interval` (double, default: 0.5)
+  - 推論タイマーの周期（秒）。この間隔で直接推論を実行する。
 
 - `confidence_threshold` (double, default: 0.5)
   - 検出の信頼度閾値
@@ -114,6 +116,47 @@ ros2 run yolo_detector yolo_node --ros-args \
 - `class_names` (string array, default: ["item"])
   - クラス名のリスト
 
+### 方法3: camera_simulatorノードで静止画を配信
+
+検出用の入力が無い環境向けに、任意の静止画を`/usb_cam/image_raw`として配信する
+`camera_simulator_node`を追加しました。
+
+```bash
+ros2 run yolo_detector camera_simulator_node --ros-args \
+  -p frame_image_path:=/path/to/image.jpg \
+  -p frame_width:=640 \
+  -p frame_height:=480 \
+  -p frame_ratio:=10.0
+```
+
+#### camera_simulatorノードのパラメータ
+
+- `frame_image_path` (string, default: "")
+  - 配信する静止画のパス。`cv2.imread()`で読み込める画像を指定。
+- `frame_width` (int, default: -1)
+  - リサイズ後の横幅。負値の場合はリサイズ無し。片方のみ指定時はアスペクト比維持で拡縮。
+- `frame_height` (int, default: -1)
+  - リサイズ後の高さ。負値の場合はリサイズ無し。
+- `frame_ratio` (double, default: 10.0)
+  - 画像をpublishするレート(Hz)。
+
+### 方法4: road_blockage_detectorノードで経路封鎖を検知
+
+YOLOの検出結果から経路封鎖看板を検知する`road_blockage_detector`は、他パッケージと同様に
+YAMLパラメータファイルで設定できるようになりました。インストール後は以下のコマンドで起動できます。
+
+```bash
+ros2 run yolo_detector road_blockage_detector --ros-args \
+  --params-file $(ros2 pkg prefix yolo_detector)/share/yolo_detector/params/road_blockage_detector.yaml
+```
+
+`params/road_blockage_detector.yaml` にはクラスID、スコア閾値、バウンディングボックスの範囲など、
+検出時に参照する閾値がまとめられています。利用環境に合わせて値を変更してください。
+封鎖確定に必要な継続時間は `route_follower` の `stagnation_duration_sec` と整合を取るため、
+ノード内に固定しており YAML では変更できません。
+シミュレーションや rosbag 再生で利用する場合は、`use_sim_time:=true` を指定するか、
+同梱の launch ファイルを使用すると時間軸の不整合による TF 取得失敗を避けられます。
+
 ## 出力例
 
 ```
@@ -126,6 +169,16 @@ ros2 run yolo_detector yolo_node --ros-args \
 ```
 
 **NCNN版は通常のPyTorch版と比較して3〜5倍高速です！**
+
+## Publishトピック
+
+- `yolo_detector/image_det` (`sensor_msgs/Image`)
+  - 入力画像に検出結果のバウンディングボックス・クラス名・スコアを重畳した画像。
+  - ヘッダは入力画像のヘッダを引き継ぎます。
+
+- `yolo_detector/detections` (`vision_msgs/Detection2DArray`)
+  - 検出結果（クラスIDはクラス名文字列、scoreに信頼度）。
+  - ヘッダは入力画像のヘッダを引き継ぎます。
 
 ## ディレクトリ構造
 

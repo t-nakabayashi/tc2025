@@ -129,6 +129,9 @@ class FollowerCore:
         # 再経路待機
         self.reroute_timeout_sec = 30.0
 
+        # road_blocked 起因のリルート抑制用ホールド時間
+        self.road_blocked_confirmation_sec = 5.0
+
         # ---- 内部状態（tickのみが変更）----
         self.status = FollowerStatus.IDLE
         self.route: Optional[Route] = None
@@ -166,6 +169,8 @@ class FollowerCore:
         self._manual_start_mb: Optional[bool] = None
         self._sig_recog_mb: Optional[int] = None  # 1=GO, 2=NOGO, その他=未定義
         self._road_blocked_mb: Optional[bool] = None
+        self._road_blocked_state: Optional[bool] = None
+        self._road_blocked_last_update: Optional[float] = None
 
         # ---- 受け渡し箱（mailboxes）とロック ----
         # 非タイマー(update_*) → [inbox_lock] → mailbox へ書き込み
@@ -264,7 +269,10 @@ class FollowerCore:
             if sig_recog is not None:
                 self._sig_recog_mb = int(sig_recog)
             if road_blocked is not None:
-                self._road_blocked_mb = bool(road_blocked)
+                blocked = bool(road_blocked)
+                self._road_blocked_mb = blocked
+                self._road_blocked_state = blocked
+                self._road_blocked_last_update = time.time()
 
     def _get_control_snapshot(self) -> Tuple[Optional[bool], Optional[int], Optional[bool]]:
         with self._ctrl_lock:
@@ -281,6 +289,18 @@ class FollowerCore:
 
         with self._ctrl_lock:
             self._road_blocked_mb = None
+            self._road_blocked_state = None
+            self._road_blocked_last_update = None
+
+    def _is_road_blocked_sustained(self) -> bool:
+        """road_blocked=True が所定時間継続しているかを確認する。"""
+        with self._ctrl_lock:
+            active = self._road_blocked_state is True
+            last_update = self._road_blocked_last_update
+
+        if not active or last_update is None:
+            return False
+        return (time.time() - last_update) >= self.road_blocked_confirmation_sec
 
     # ========================= 周期処理（唯一の状態更新点） =========================
     def tick(self) -> FollowerOutput:
@@ -522,7 +542,7 @@ class FollowerCore:
                 if self._check_stagnation_tick(exclude_stop=exclude_stop):
                     self.status = FollowerStatus.STAGNATION_DETECTED
                     # 滞留検知をトリガとして road_blocked を最優先で確認する。
-                    if bool(road_blocked):
+                    if self._is_road_blocked_sustained():
                         self.last_stagnation_reason = "road_blocked"
                         self._consume_control_inputs()
                         self._enter_waiting_reroute()

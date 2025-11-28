@@ -15,13 +15,14 @@
 ### Dashboard タブ
 - **ステータスカード列**：ルート進捗、フォロワ状態、速度・目標距離カードを 5Hz 以内で更新。
 - **イベントバナー**：`road_blocked` → `manual_start` → `sig_recog` の優先順位で最新イベントを表示。60 秒経過で自動クリア。
-- **制御コマンドタブ**：各トピックの送信 UI を Notebook 形式でまとめ、Spinbox やラジオボタンで値を入力。送信結果は最終送信値と時刻として即座に反映されます。
+- **制御コマンドタブ**：各トピックの送信 UI を Notebook 形式でまとめ、Spinbox やラジオボタンで値を入力。`frame_image_path` タグでは静止画パスを入力して `/frame_image_path` トピックへ単発 publish できます。送信結果は最終送信値と時刻として即座に反映されます。
 - **画像パネル**：ルート地図（`/active_route` の付帯画像）、障害物ビュー（`/sensor_viewer`）、カメラ映像（`/usb_cam/image_raw`・`/sig_det_imgs`）。レターボックス処理でアスペクト比を保持し、障害物ヒント値を左上にオーバレイ表示。
-- **ノード起動サイドバー**：主要 5 ノード（`route_planner` / `route_manager` / `route_follower` / `robot_navigator` / `obstacle_monitor`）のカードを縦に配置。パラメータ YAML 選択、シミュレータ同時起動（該当ノードのみ）、個別／一括の起動・停止ボタンを提供します。
+- **ノード起動サイドバー**：主要ノードカードに加え `Yolo Detector` カードを配置。インストール済み `road_blockage_detector` の `params/` 配下から YAML を自動列挙し、`yolo_ncnn_node` / `yolo_node` をトグルスイッチで切り替えて起動できます。Simulator をオンにすると `camera_simulator_node` を同時起動し、他カード同様に起動・停止やパラメータ切替が可能です。
 
 ### Console Logs タブ
 - ノードごとに最新ログをリングバッファで保持。GUI 右クリックからコピーでき、検索バーでフィルタリング可能です。
 - 各セクションには `RUNNING/STOPPED/ERROR` インジケータと、直近の起動／停止時刻が表示されます。
+- `Yolo Detector` も他ノード同様にパラメータ一覧・コンソールログタブへカードを追加し、選択した `road_blockage_detector` の YAML 内容表示やログファイルの直接オープンが可能です。
 
 ## 起動方法
 ### 通常起動

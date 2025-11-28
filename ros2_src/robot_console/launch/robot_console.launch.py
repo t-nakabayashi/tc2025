@@ -35,7 +35,7 @@ _TOPIC_CONFIGS = [
     ('active_route_topic', 'active_route', '/active_route', '経路情報トピック'),
     ('follower_state_topic', 'follower_state', '/follower_state', '追従状態トピック'),
     ('sensor_viewer_topic', 'sensor_viewer', '/sensor_viewer', 'センサビューアトピック'),
-    ('drive_camera_topic', 'usb_cam/image_raw', '/usb_cam/image_raw', '走行カメラ画像トピック'),
+    ('drive_camera_topic', 'usb_cam/image_raw', '/yolo_detector/image_det', '走行カメラ画像トピック'),
     ('signal_camera_topic', 'sig_det_imgs', '/sig_det_imgs', '信号検知画像トピック'),
     ('active_target_topic', 'active_target', '/active_target', 'ターゲット姿勢トピック'),
     ('amcl_pose_topic', 'amcl_pose', '/amcl_pose', 'AMCL 推定姿勢トピック'),

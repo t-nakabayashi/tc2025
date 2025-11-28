@@ -15,8 +15,9 @@ from __future__ import annotations
 
 import math
 import sys
+from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Sequence, Tuple
+from typing import Iterable, List, Optional, Sequence, Tuple, Union
 
 from PIL import Image, ImageDraw
 
@@ -67,36 +68,64 @@ def webmercator_to_latlon(x: float, y: float) -> Tuple[float, float]:
 # 主要関数
 # ----------------------------------------------------------------------
 
-def latlon_to_pixel(
-    image_path: str,
-    worldfile_path: str,
-    latlon_list: Sequence[Tuple[float, float]],
-    *,
-    verbose: bool = False,
-) -> List[Tuple[int | None, int | None]]:
-    """
-    緯度経度を画像ピクセル座標に変換する。
+@dataclass
+class _MapInfo:
+    """PGWと画像情報を保持し、座標変換を提供する内部構造。"""
 
-    Args:
-        image_path: PNG画像のパス
-        worldfile_path: 対応するPGWファイルのパス
-        latlon_list: (lat, lon)のタプルリスト
+    image_path: str
+    worldfile_path: str
+    width: int
+    height: int
+    A: float
+    D: float
+    B: float
+    E: float
+    C: float
+    F: float
+    projected: bool
+    det: float
+    invA: float
+    invB: float
+    invD: float
+    invE: float
 
-    Returns:
-        [(x, y), ...]（画像外は(None, None)）
-    """
+    def latlon_to_map(self, lat: float, lon: float) -> Tuple[float, float]:
+        """緯度経度を PGW 座標系（投影 or 地理）へ変換する。"""
+        if self.projected:
+            return latlon_to_webmercator(lat, lon)
+        return lon, lat
+
+    def map_to_latlon(self, mapx: float, mapy: float) -> Tuple[float, float]:
+        """PGW 座標系から緯度経度へ変換する。"""
+        if self.projected:
+            lat, lon = webmercator_to_latlon(mapx, mapy)
+            return lat, lon
+        # 地理座標系（度）の場合は (lon, lat) 順を戻す
+        return mapy, mapx
+
+    def latlon_to_pixel_float(self, lat: float, lon: float) -> Tuple[float, float]:
+        """緯度経度→ピクセル座標（float）。"""
+        mapx, mapy = self.latlon_to_map(lat, lon)
+        x_img = self.invA * (mapx - self.C) + self.invB * (mapy - self.F)
+        y_img = self.invD * (mapx - self.C) + self.invE * (mapy - self.F)
+        return x_img, y_img
+
+    def pixel_to_latlon(self, px: float, py: float) -> Tuple[float, float]:
+        """ピクセル座標→緯度経度。"""
+        mapx = self.A * px + self.B * py + self.C
+        mapy = self.D * px + self.E * py + self.F
+        return self.map_to_latlon(mapx, mapy)
+
+
+_LOADED_MAP: Optional[_MapInfo] = None
+
+
+def _load_map_info(image_path: str, worldfile_path: str) -> _MapInfo:
+    """画像・PGWを読み込み `_MapInfo` を生成する。"""
     A, D, B, E, C, F = _read_pgw(worldfile_path)
-
     projected = _is_projected_pgw(C, F, A, E)
-
     with Image.open(image_path) as img:
         width, height = img.size
-
-    if verbose:
-        print("=== PGW parameters ===")
-        print(f"A={A}, D={D}, B={B}, E={E}, C={C}, F={F}")
-        print(f"Image size: width={width}, height={height}")
-        print(f"PGW interpreted as {'Projected (m)' if projected else 'Geographic (deg)'}\n")
 
     det = A * E - B * D
     if abs(det) < 1e-12:
@@ -106,27 +135,115 @@ def latlon_to_pixel(
     invD = -D / det
     invE = A / det
 
-    results: List[Tuple[int | None, int | None]] = []
+    return _MapInfo(
+        image_path=str(image_path),
+        worldfile_path=str(worldfile_path),
+        width=width,
+        height=height,
+        A=A,
+        D=D,
+        B=B,
+        E=E,
+        C=C,
+        F=F,
+        projected=projected,
+        det=det,
+        invA=invA,
+        invB=invB,
+        invD=invD,
+        invE=invE,
+    )
+
+
+def load_map(image_path: Union[str, Path], worldfile_path: Union[str, Path]) -> None:
+    """画像と PGW を読み込み、以降の単一座標変換用にキャッシュする。"""
+    global _LOADED_MAP
+    _LOADED_MAP = _load_map_info(str(image_path), str(worldfile_path))
+
+
+def _require_loaded_map(
+    image_path: Optional[Union[str, Path]] = None,
+    worldfile_path: Optional[Union[str, Path]] = None,
+) -> _MapInfo:
+    """キャッシュされた `_MapInfo` を取得する。必要に応じてロードする。"""
+    global _LOADED_MAP
+    if _LOADED_MAP is not None:
+        return _LOADED_MAP
+    if image_path is None or worldfile_path is None:
+        raise RuntimeError("load_map() を先に呼び出してください。")
+    load_map(image_path, worldfile_path)
+    assert _LOADED_MAP is not None
+    return _LOADED_MAP
+
+
+def get_map_size() -> Tuple[int, int]:
+    """ロード済み地図の (width, height) を返す。"""
+    info = _require_loaded_map()
+    return info.width, info.height
+
+
+def _latlon_iterable(latlon_list: Sequence[Tuple[float, float]]) -> Iterable[Tuple[float, float]]:
     for lat, lon in latlon_list:
-        # --- 変換手順 ---
-        if projected:
-            mapx, mapy = latlon_to_webmercator(lat, lon)
-        else:
-            mapx, mapy = lon, lat
+        yield float(lat), float(lon)
 
-        x_img = invA * (mapx - C) + invB * (mapy - F)
-        y_img = invD * (mapx - C) + invE * (mapy - F)
 
-        x_pix = round(x_img)
-        y_pix = round(y_img)
+def latlon_to_pixel(
+    *args: Union[str, Path, Sequence[Tuple[float, float]], float],
+    verbose: bool = False,
+) -> Union[List[Tuple[int | None, int | None]], Tuple[float, float]]:
+    """緯度経度→ピクセル座標変換。
 
-        inside = 0 <= x_pix < width and 0 <= y_pix < height
+    2種類の呼出し方法をサポートする：
+
+    1. 既存互換: ``latlon_to_pixel(image_path, worldfile_path, latlon_list, verbose=False)``
+    2. キャッシュ使用: ``load_map()`` 呼出後に ``latlon_to_pixel(lat, lon)``
+    """
+
+    # --- 単一座標（キャッシュ利用） ---
+    if len(args) == 2 and all(isinstance(v, (int, float)) for v in args):
+        lat = float(args[0])
+        lon = float(args[1])
+        info = _require_loaded_map()
+        px, py = info.latlon_to_pixel_float(lat, lon)
+        return px, py
+
+    # --- 既存API互換（バッチ変換） ---
+    if len(args) != 3:
+        raise TypeError(
+            "latlon_to_pixel() の引数が不正です。旧API: (image, worldfile, list) / 新API: (lat, lon)"
+        )
+
+    image_path = str(args[0])
+    worldfile_path = str(args[1])
+    latlon_list = args[2]
+    if not isinstance(latlon_list, Sequence):
+        raise TypeError("latlon_list には (lat, lon) シーケンスを指定してください。")
+
+    info = _load_map_info(image_path, worldfile_path)
+    # バッチ呼出時もキャッシュを更新しておく（後続の単体変換に備える）
+    global _LOADED_MAP
+    _LOADED_MAP = info
+
+    if verbose:
+        print("=== PGW parameters ===")
+        print(f"A={info.A}, D={info.D}, B={info.B}, E={info.E}, C={info.C}, F={info.F}")
+        print(f"Image size: width={info.width}, height={info.height}")
+        mode = "Projected (m)" if info.projected else "Geographic (deg)"
+        print(f"PGW interpreted as {mode}\n")
+
+    results: List[Tuple[int | None, int | None]] = []
+    for lat, lon in _latlon_iterable(latlon_list):
+        px_f, py_f = info.latlon_to_pixel_float(lat, lon)
+        x_pix = round(px_f)
+        y_pix = round(py_f)
+        inside = 0 <= x_pix < info.width and 0 <= y_pix < info.height
 
         if verbose:
+            mapx, mapy = info.latlon_to_map(lat, lon)
             print(
                 f"lat={lat:.6f}, lon={lon:.6f} -> "
                 f"mapX={mapx:.3f}, mapY={mapy:.3f}, "
-                f"x_img={x_img:.3f}, y_img={y_img:.3f}, "
+                f"x_img={px_f:.3f}, y_img={py_f:.3f}, "
                 f"x_pix={x_pix}, y_pix={y_pix}, inside={inside}"
             )
 
@@ -136,8 +253,42 @@ def latlon_to_pixel(
             results.append((None, None))
 
     if verbose:
-        print("")  # 改行を入れて見やすく
+        print("")
     return results
+
+
+def pixel_to_latlon(
+    px: float,
+    py: float,
+    *,
+    image_path: Optional[Union[str, Path]] = None,
+    worldfile_path: Optional[Union[str, Path]] = None,
+) -> Tuple[float, float]:
+    """ピクセル→緯度経度。load_map() 済み、もしくはパス指定で利用する。"""
+    info = _require_loaded_map(image_path, worldfile_path)
+    return info.pixel_to_latlon(float(px), float(py))
+
+
+def latlon_to_local_meters(lat: float, lon: float) -> Tuple[float, float]:
+    """緯度経度→ローカル平面直交座標 (E,N) [m]。"""
+    info = _require_loaded_map()
+    lat_f = float(lat)
+    lon_f = float(lon)
+    if info.projected:
+        return info.latlon_to_map(lat_f, lon_f)
+    # PGWが度の場合は Web Mercator を採用してローカル直交座標とする
+    return latlon_to_webmercator(lat_f, lon_f)
+
+
+def local_meters_to_latlon(e: float, n: float) -> Tuple[float, float]:
+    """ローカル平面直交座標 (E,N) [m] → 緯度経度。"""
+    info = _require_loaded_map()
+    e_f = float(e)
+    n_f = float(n)
+    if info.projected:
+        return info.map_to_latlon(e_f, n_f)
+    lat, lon = webmercator_to_latlon(e_f, n_f)
+    return lat, lon
 
 def _draw_points(image_path: str, points: List[Tuple[int | None, int | None]], output_path: str) -> None:
     """変換結果を画像上に描画して保存する。"""
