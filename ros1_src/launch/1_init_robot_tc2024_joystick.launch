@@ -8,7 +8,7 @@
 		<param name="port" value="/dev/ttyACM0" />
 		<param name="param_file" value="/home/nkb/icart-middle.param" />
 		<param name="publish_odom_tf" value="false" />
-    <remap from="ypspur_ros/cmd_vel" to="cmd_vel"/>
+    <!--remap from="ypspur_ros/cmd_vel" to="cmd_vel"/-->
 	</node>
 
   <!-- ジョイスティック入力設定 -->
@@ -48,7 +48,7 @@
 
 
   <!-- Joystick teleoperation ノード -->
-  <!--node pkg="tc2025" type="joystick_teleop.py" name="joystick_teleop" output="screen">
+  <node pkg="tc2025" type="joystick_teleop.py" name="joystick_teleop" output="screen">
     <param name="linear_axis" value="1" />
     <param name="angular_axis" value="0" />
     <param name="linear_y_axis" value="-1" />
@@ -63,7 +63,7 @@
     <param name="turbo_ratio" value="$(arg turbo_ratio)" />
     <param name="timeout" value="0.5" />
     <param name="publish_rate" value="20.0" />
-  </node-->
+  </node>
 
   <!-- Waypoint input ノード -->
   <node pkg="tc2025" type="waypoint_input.py" name="waypoint_input" output="screen" launch-prefix="xterm -e" />

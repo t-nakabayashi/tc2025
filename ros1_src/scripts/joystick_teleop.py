@@ -7,10 +7,13 @@ sensor_msgs/Joyメッセージ（joy_nodeなどが発行）を受け取り、YP-
 調整可能で、PS2コントローラのように「上＝前進」となるよう反転設定も
 備える。またボタン0〜3を押した瞬間に対応するウェイポイントフラグ
 （Int32MultiArray）を発行する。
+
+デッドマンスイッチがOFFの場合、別モジュールから配信されるcmd_velを
+スルーしてypspur_ros/cmd_velへ転送する。
 """
 
 import math
-from typing import List
+from typing import List, Optional
 
 import rospy
 from geometry_msgs.msg import Twist
@@ -41,18 +44,31 @@ class JoystickTeleop:
         publish_rate = rospy.get_param("~publish_rate", 20.0)  # Hz
         self.publish_period = rospy.Duration(1.0 / max(publish_rate, 1.0))
 
-        self.cmd_vel_pub = rospy.Publisher("cmd_vel", Twist, queue_size=1)
+        self.cmd_vel_pub = rospy.Publisher("ypspur_ros/cmd_vel", Twist, queue_size=1)
         self.last_cmd = Twist()
         self.last_input_time = rospy.Time.now()
         self.prev_buttons = []  # ボタン状態の上昇エッジ検出用
 
+        # デッドマンスイッチの状態
+        self.deadman_enabled = False
+
+        # 別モジュールからのcmd_vel（自動制御等）
+        self.external_cmd_vel: Optional[Twist] = None
+
         rospy.Subscriber("joy", Joy, self.joy_callback, queue_size=1)
+        rospy.Subscriber("cmd_vel", Twist, self.external_cmd_vel_callback, queue_size=1)
         rospy.Timer(self.publish_period, self.publish_callback)
 
         # ウェイポイントの押下フラグを通知するトピック
         self.waypoint_flag_pub = rospy.Publisher("waypoint_flag", Int32MultiArray, queue_size=1)
 
         rospy.loginfo("joystick_teleop node started. Waiting for Joy messages...")
+        rospy.loginfo("  Deadman OFF: Pass through cmd_vel -> ypspur_ros/cmd_vel")
+        rospy.loginfo("  Deadman ON: Use joystick input -> ypspur_ros/cmd_vel")
+
+    def external_cmd_vel_callback(self, msg: Twist) -> None:
+        """別モジュールからのcmd_velを受信（自動制御等）"""
+        self.external_cmd_vel = msg
 
     def joy_callback(self, msg: Joy) -> None:
         now = rospy.Time.now()
@@ -60,12 +76,22 @@ class JoystickTeleop:
         # 0〜3番ボタンの上昇エッジを先に処理（デッドマン無効でも通知したい）
         self._publish_waypoint_flag(msg.buttons)
 
+        # デッドマンボタンの状態をチェック
         if self.enable_button >= 0:
             if self.enable_button >= len(msg.buttons) or msg.buttons[self.enable_button] == 0:
+                # デッドマンOFF
+                self.deadman_enabled = False
                 self._stop()
                 self.last_input_time = now
                 return
+            else:
+                # デッドマンON
+                self.deadman_enabled = True
+        else:
+            # enable_buttonが設定されていない場合は常にON
+            self.deadman_enabled = True
 
+        # デッドマンONの場合のみジョイスティック入力を処理
         # 軸値を読み出してTwistを生成
         linear_x = self._read_axis(msg.axes, self.linear_axis, self.linear_scale)
         if self.linear_axis_invert:
@@ -89,11 +115,22 @@ class JoystickTeleop:
         self.last_input_time = now
 
     def publish_callback(self, _event) -> None:
-        # タイムアウト超過時は安全のため停止
-        if rospy.Time.now() - self.last_input_time > rospy.Duration(self.timeout):
-            if not self._is_zero_twist(self.last_cmd):
+        """定期的にcmd_velを発行"""
+        if self.deadman_enabled:
+            # デッドマンON: ジョイスティック入力を使用
+            # タイムアウト超過時は安全のため停止
+            if rospy.Time.now() - self.last_input_time > rospy.Duration(self.timeout):
+                if not self._is_zero_twist(self.last_cmd):
+                    self._stop()
+            self.cmd_vel_pub.publish(self.last_cmd)
+        else:
+            # デッドマンOFF: 別モジュールのcmd_velをスルー
+            if self.external_cmd_vel is not None:
+                self.cmd_vel_pub.publish(self.external_cmd_vel)
+            else:
+                # 外部入力がない場合は停止状態を維持
                 self._stop()
-        self.cmd_vel_pub.publish(self.last_cmd)
+                self.cmd_vel_pub.publish(self.last_cmd)
 
     def _read_axis(self, axes: List[float], index: int, scale: float) -> float:
         if index < 0 or index >= len(axes):
