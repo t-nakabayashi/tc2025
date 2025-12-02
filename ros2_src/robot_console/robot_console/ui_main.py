@@ -43,7 +43,13 @@ else:  # pragma: no cover - OpenCV 無し環境では未使用
     np = None  # type: ignore
 
 from .gui_core import CAMERA_DISPLAY_SIZE, GuiCore
-from .utils import GuiSnapshot, NodeLaunchState, NodeLaunchStatus, resize_with_letter_box
+from .utils import (
+    GuiSnapshot,
+    NodeLaunchState,
+    NodeLaunchStatus,
+    VisualizationState,
+    resize_with_letter_box,
+)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -315,6 +321,7 @@ class UiMain:
         }
 
         self._launch_widgets: Dict[str, Dict[str, object]] = {}
+        self._rviz_button: Optional[ttk.Button] = None
         self._param_texts: Dict[str, tk.Text] = {}
         self._param_last_display: Dict[str, str] = {}
         self._file_cache: Dict[str, Tuple[float, str]] = {}
@@ -426,18 +433,27 @@ class UiMain:
         top_bar = ttk.Frame(main_area)
         top_bar.grid(row=0, column=0, sticky='ew', pady=(0, 8))
         top_bar.columnconfigure(0, weight=1)
+        top_bar.columnconfigure(1, weight=0)
+        top_bar.columnconfigure(2, weight=0)
         ttk.Label(top_bar, text='robot_console ダッシュボード', style='Bold.TLabel').grid(
             row=0,
             column=0,
             sticky='w',
         )
+        self._rviz_button = ttk.Button(
+            top_bar,
+            text='RVIZ起動',
+            command=self._on_toggle_visualization,
+            width=10,
+        )
+        self._rviz_button.grid(row=0, column=1, sticky='e', padx=(8, 4))
         self._sidebar_toggle_btn = ttk.Button(
             top_bar,
             text='◀ ノード起動パネル',
             command=self._toggle_sidebar,
             width=18,
         )
-        self._sidebar_toggle_btn.grid(row=0, column=1, sticky='e')
+        self._sidebar_toggle_btn.grid(row=0, column=2, sticky='e')
 
         dashboard_body = ttk.Frame(main_area)
         dashboard_body.grid(row=1, column=0, sticky='nsew')
@@ -1174,6 +1190,20 @@ class UiMain:
             messagebox.showinfo('ノード再起動', message)
         self._core.request_launch_all()
 
+    def _on_toggle_visualization(self) -> None:
+        """RVizおよび可視化ノードの起動・停止をトグルする。"""
+
+        snapshot = self._get_latest_snapshot()
+        state = snapshot.visualization_state if snapshot else None
+        if state and state.status in (
+            NodeLaunchStatus.STARTING,
+            NodeLaunchStatus.RUNNING,
+            NodeLaunchStatus.STOPPING,
+        ):
+            self._core.request_stop_visualization()
+        else:
+            self._core.request_start_visualization()
+
     def _build_logs(self, parent: ttk.Frame) -> None:
         columns = 2
         snapshot = self._core.snapshot()
@@ -1360,6 +1390,7 @@ class UiMain:
         follower = snapshot.follower_state
         manager_state = route.manager_state.upper() if route.manager_state else 'UNKNOWN'
         route_status = route.route_status.upper() if route.route_status else 'UNKNOWN'
+        self._update_visualization_button(snapshot.visualization_state)
         self._route_state_vars.manager.set(manager_state)
         self._route_state_vars.route_status.set(route_status)
         progress_ratio, display_index, total_waypoints = compute_route_progress(
@@ -1831,6 +1862,23 @@ class UiMain:
                         if isinstance(holder, dict):
                             holder['last_synced'] = desired
 
+    def _update_visualization_button(self, state: VisualizationState) -> None:
+        """RViz起動ボタンの文言と状態を更新する。"""
+
+        if self._rviz_button is None:
+            return
+        running = state.status in (
+            NodeLaunchStatus.STARTING,
+            NodeLaunchStatus.RUNNING,
+            NodeLaunchStatus.STOPPING,
+        )
+        label = 'RVIZ停止' if running else 'RVIZ起動'
+        self._rviz_button.configure(text=label)
+        if state.status in (NodeLaunchStatus.STARTING, NodeLaunchStatus.STOPPING):
+            self._rviz_button.state(['disabled'])
+        else:
+            self._rviz_button.state(['!disabled'])
+
     def _update_logs(self, snapshot: GuiSnapshot) -> None:
         for profile_id, text_widget in self._log_texts.items():
             logs = snapshot.console_logs.get(profile_id)
@@ -2074,6 +2122,7 @@ class UiMain:
             self._finalize_shutdown()
             return
         self._shutdown_pending = True
+        self._core.request_stop_visualization()
         self._core.request_stop_all()
         self._schedule_shutdown_check()
 
@@ -2148,6 +2197,13 @@ class UiMain:
         for state in snapshot.launch_states.values():
             if UiMain._is_state_active(state):  # pylint: disable=protected-access
                 return True
+        viz_state = snapshot.visualization_state
+        if viz_state.status in (
+            NodeLaunchStatus.STARTING,
+            NodeLaunchStatus.RUNNING,
+            NodeLaunchStatus.STOPPING,
+        ):
+            return True
         return False
 
     @staticmethod

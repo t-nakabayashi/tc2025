@@ -222,7 +222,15 @@ class RouteFollowerNode(Node):
             wp_list.append(
                 CoreWaypoint(
                     label=w.label,
-                    pose=CorePose(w.pose.position.x, w.pose.position.y, self._yaw_from_quat(w.pose.orientation)),
+                    pose=CorePose(
+                        w.pose.position.x,
+                        w.pose.position.y,
+                        self._yaw_from_quat(w.pose.orientation),
+                        orientation_x=float(getattr(w.pose.orientation, "x", 0.0)),
+                        orientation_y=float(getattr(w.pose.orientation, "y", 0.0)),
+                        orientation_z=float(getattr(w.pose.orientation, "z", 0.0)),
+                        orientation_w=float(getattr(w.pose.orientation, "w", 1.0)),
+                    ),
                     line_stop=bool(getattr(w, "line_stop", False)),
                     signal_stop=bool(getattr(w, "signal_stop", False)),
                     left_open=float(getattr(w, "left_open", 0.0)),
@@ -252,6 +260,10 @@ class RouteFollowerNode(Node):
             pose_stamped.pose.position.x,
             pose_stamped.pose.position.y,
             self._yaw_from_quat(pose_stamped.pose.orientation),
+            orientation_x=float(getattr(pose_stamped.pose.orientation, "x", 0.0)),
+            orientation_y=float(getattr(pose_stamped.pose.orientation, "y", 0.0)),
+            orientation_z=float(getattr(pose_stamped.pose.orientation, "z", 0.0)),
+            orientation_w=float(getattr(pose_stamped.pose.orientation, "w", 1.0)),
         )
         self.core.update_pose(pose)
 
@@ -475,6 +487,13 @@ class RouteFollowerNode(Node):
         return float(self._euclid_diff(current_pose, target_pose))
 
     def _yaw_from_quat(self, q: Quaternion) -> float:
+        """クォータニオンからyaw(平面角)のみを抽出する。
+
+        FollowerCoreは全ての姿勢を2D平面上のyawで扱い、目標生成や回避計算
+        (_yaw_betweenやavoidanceサブゴール)で直接使用する。そのため受信時に
+        一度だけyawへ正規化し、以降のロジックをクォータニオンに依存させない
+        ようにする。
+        """
         x, y, z, w = q.x, q.y, q.z, q.w
         siny_cosp = 2.0 * (w * z + x * y)
         cosy_cosp = 1.0 - 2.0 * (y * y + z * z)
@@ -490,9 +509,18 @@ class RouteFollowerNode(Node):
         p.position.y = pose.y
         p.position.z = 0.0
         q = Quaternion()
-        q.x, q.y = 0.0, 0.0
-        q.z = math.sin(pose.yaw / 2.0)
-        q.w = math.cos(pose.yaw / 2.0)
+        orientation = (
+            getattr(pose, "orientation_x", None),
+            getattr(pose, "orientation_y", None),
+            getattr(pose, "orientation_z", None),
+            getattr(pose, "orientation_w", None),
+        )
+        if all(v is not None for v in orientation):
+            q.x, q.y, q.z, q.w = (float(v) for v in orientation)
+        else:
+            q.x, q.y = 0.0, 0.0
+            q.z = math.sin(pose.yaw / 2.0)
+            q.w = math.cos(pose.yaw / 2.0)
         p.orientation = q
         return p
 
