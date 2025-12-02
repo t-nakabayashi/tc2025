@@ -32,16 +32,21 @@
     <param name="coalesce_interval" value="$(arg joy_coalesce_interval)" />
   </node>
 
+  <!-- ublox GPS -->
+  <include file="$(find ublox_gps)/launch/ublox_device.launch">
+    <arg name="node_name" value="ublox" />
+    <arg name="param_file_dir" value="$(find ublox_gps)/config" />
+    <arg name="param_file_name" value="zed_f9p_rtk" />
+  </include>
+
 	<!-- usb_acmノードを実行する -->
 	<node name="usb_cam" pkg="usb_cam" type="usb_cam_node" output="screen">
 			<!-- カメラの指定　defaultは/dev/video0 -->
-			<param name="video_device" value="/dev/video1"/>
+			<param name="video_device" value="/dev/video0"/>
 			<!-- 画像の大きさ（横幅）の指定 -->
 			<param name="image_width" value="640"/>
 			<!-- 画像の大きさ（縦幅）の指定 -->
 			<param name="image_height" value="480"/>
-			<!-- 画像フォーマット設定　"mjpeg" or "yuyv" or "uyvy" -->
-			<param name="pixel_format" value="mjpeg"/>
 			<!-- fpsの指定　frame per second -->
 			<param name="framerate" value="5"/>
 	</node>
@@ -77,12 +82,6 @@
 
 </node>
 
-  <!-- ublox GPS -->
-  <include file="$(find ublox_gps)/launch/ublox_device.launch">
-    <arg name="node_name" value="ublox" />
-    <arg name="param_file_dir" value="$(find ublox_gps)/config" />
-    <arg name="param_file_name" value="zed_f9p_rtk" />
-  </include>
 
 	<!-- MID360 -->
 	<!--user configure parameters for ros start-->

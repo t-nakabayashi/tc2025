@@ -23,9 +23,9 @@
 
 	<rosparam param="footprint" ns="/move_base/local_costmap">[[0.05,-0.1], [0.05,0.1], [-0.3,0.1], [-0.3,-0.1]]</rosparam>
 	<rosparam param="footprint" ns="/move_base/global_costmap">[[0.05,-0.1], [0.05,0.1], [-0.3,0.1], [-0.3,-0.1]]</rosparam>
-	<arg name="waypoint_file" default="$(find fast_lio)/PCD/waypoint(lidarGPS220-1100).csv" />
-	<arg name="map_file_move" default="$(find fast_lio)/PCD/scans_cleaned_2d.yaml" />
-	<arg name="pcd_file" default="$(find fast_lio)/PCD/scans_light.pcd" />
+	<arg name="waypoint_file" default="$(find fast_lio)/PCD/1way/waypoint.csv" />
+	<arg name="map_file_move" default="$(find fast_lio)/PCD/1way/scans_cleaned_2d.yaml" />
+	<arg name="pcd_file" default="$(find fast_lio)/PCD/all/scans.pcd" />
 	<node respawn="true" name="map_server_move" pkg="map_server" type="map_server" args="$(arg map_file_move)">
 			<remap from="map" to="/map"/>
 	</node>
@@ -62,29 +62,15 @@
 	  <rosparam command="load" file="$(arg config_file)"/>
 
 	  <node pkg="rviz" type="rviz" name="rviz" args="-d $(find tc2025)/config/mcl_3dl.rviz" />
-
-	  <!-- GPS+IMU Heading Fusion Localization (代替mcl_3dl) -->
-	  <node pkg="tc2025" type="gps_localization.py" name="gps_localization" output="screen">
-	    <!-- IMUトピック名 -->
-	    <param name="imu_topic" type="string" value="/mid360/livox/imu" />
-
-	    <!-- GPS進行方位補正のための最小速度 [m/s] -->
-	    <!-- 低速・停止時はGPS方位がノイジーなのでIMUのみを使用 -->
-	    <param name="min_speed_for_gps_heading" type="double" value="0.3" />
-
-	    <!-- GPS方位補正ゲイン（速度別） -->
-	    <!-- 値を上げるとGPS方位へ速く寄る（IMUドリフトに強くなるが、GPSノイズにも引っ張られる） -->
-	    <param name="gps_heading_gain_slow" type="double" value="0.2" />  <!-- 低〜中速 (<1.0m/s) -->
-	    <param name="gps_heading_gain_fast" type="double" value="0.4" />  <!-- 高速 (>=1.0m/s) -->
-
-	    <!-- ジャイロバイアス学習係数 -->
-	    <!-- GPS方位とのズレを使ってジャイロバイアスをゆっくり調整 -->
-	    <param name="bias_learn_gain" type="double" value="0.02" />
-
-	    <!-- Odometry補完機能（非推奨 - IMU使用のため不要） -->
-	    <param name="use_odom_complement" type="bool" value="false" />
+	  <node pkg="mcl_3dl" type="mcl_3dl" name="mcl_3dl" output="screen" unless="$(arg generate_test_bag)">
+	    <param name="compatible" value="1" />
+	    <remap from="/imu/data" to="/mid360/livox/imu_new" />
+	    <remap from="/odom" to="/Odometry" />
+	    <!--remap from="/cloud" to="/mid360/livox/lidar" /-->
+		<!--remap from="/cloud" to="/velodyne_points" /-->
+		<remap from="/cloud" to="/merged_points" />
 	  </node>
-
+	  
 	  <node pkg="obj_to_pointcloud" type="obj_to_pointcloud" name="obj_to_pointcloud"
 	      if="$(arg use_cad_map)">
 	    <param name="objs" value="$(arg map_objs)" />
@@ -142,10 +128,6 @@
 
 	<!--Lidarデータの統合スクリプトを起動 -->
 	<node pkg="tc2025" name="marge_lidar_data" type="marge_lidar_data.py">
-	</node>
-
-	<!-- GPS Pose Estimator GUI -->
-	<node pkg="tc2025" name="gps_pose_estimator" type="gps_pose_estimator.py" output="screen">
 	</node>
 
 </launch>

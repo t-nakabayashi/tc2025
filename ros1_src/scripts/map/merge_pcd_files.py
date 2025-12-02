@@ -121,7 +121,7 @@ def main():
     parser.add_argument(
         '--end',
         type=int,
-        default=14,
+        default=3,
         help='End number (default: 14)'
     )
     parser.add_argument(
