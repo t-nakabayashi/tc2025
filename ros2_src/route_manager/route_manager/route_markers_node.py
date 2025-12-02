@@ -42,7 +42,7 @@ class ActiveRouteMarkerNode(Node):
         )
         qos_marker = QoSProfile(
             reliability=ReliabilityPolicy.BEST_EFFORT,
-            durability=DurabilityPolicy.VOLATILE,
+            durability=DurabilityPolicy.TRANSIENT_LOCAL,
             history=HistoryPolicy.KEEP_LAST,
             depth=10,
         )
