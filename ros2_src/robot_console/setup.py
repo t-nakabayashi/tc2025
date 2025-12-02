@@ -25,6 +25,7 @@ setup(
         (f'share/{package_name}/launch', glob('launch/*.launch.py')),
         (f'share/{package_name}/config/node_params',
          glob('config/node_params/**/*.yaml', recursive=True)),
+        (f'share/{package_name}/rviz', glob('rviz/*.rviz')),
         (f'share/{package_name}/docs', collect_data_files('docs')),
         (f'share/{package_name}/tools', collect_data_files('tools')),
         (f'share/{package_name}', ['package.xml']),

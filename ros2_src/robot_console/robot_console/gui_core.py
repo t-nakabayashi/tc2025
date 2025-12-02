@@ -48,6 +48,7 @@ from .utils import (
     ObstacleHintView,
     RouteStateView,
     TargetDistanceView,
+    VisualizationState,
     clone_launch_state,
     convert_image_message,
     create_placeholder_image,
@@ -436,6 +437,9 @@ class GuiCore:
         self._images.external_camera = self._placeholders['camera_drive']
         self._launch_states: Dict[str, NodeLaunchState] = {}
         self._log_buffers: Dict[str, ConsoleLogBuffer] = {}
+        self._visualization_state = VisualizationState()
+        self._visualization_processes: Dict[str, subprocess.Popen[str]] = {}
+        self._visualization_threads: List[threading.Thread] = []
         self._lock = threading.Lock()
         self._command_queue: queue.Queue[GuiCommand] = queue.Queue()
         self._current_target: Optional[PoseStamped] = None
@@ -453,6 +457,8 @@ class GuiCore:
         self._profiles = launch_profiles or default_launch_profiles()
         self._initialize_launch_states()
         self._load_additional_params()
+        with self._lock:
+            self._visualization_state.process_ids = {}
 
     def _initialize_launch_states(self) -> None:
         for profile in self._profiles:
@@ -877,6 +883,16 @@ class GuiCore:
     def request_stop_all(self) -> None:
         self._command_queue.put(GuiCommand(GuiCommandType.STOP_ALL, {}))
 
+    def request_start_visualization(self) -> None:
+        """可視化用ノード群をまとめて起動するコマンドを登録する。"""
+
+        self._command_queue.put(GuiCommand(GuiCommandType.START_VISUALIZATION, {}))
+
+    def request_stop_visualization(self) -> None:
+        """可視化用ノード群の停止コマンドを登録する。"""
+
+        self._command_queue.put(GuiCommand(GuiCommandType.STOP_VISUALIZATION, {}))
+
     def update_selected_param(self, profile_id: str, param_display: Optional[str]) -> None:
         param_path: Optional[str] = None
         if param_display:
@@ -948,6 +964,7 @@ class GuiCore:
                 launch_states=launch_states,
                 console_logs=logs,
                 console_log_paths=log_paths,
+                visualization_state=replace(self._visualization_state),
             )
         return snapshot
 
@@ -1011,6 +1028,10 @@ class GuiCore:
         elif command.command_type == GuiCommandType.STOP_ALL:
             for profile in reversed(self._profiles):
                 self._handle_stop_request(profile.profile_id)
+        elif command.command_type == GuiCommandType.START_VISUALIZATION:
+            self.start_visualization()
+        elif command.command_type == GuiCommandType.STOP_VISUALIZATION:
+            self.stop_visualization()
 
     def _handle_launch_request(self, profile_id: str) -> None:
         profile = next((p for p in self._profiles if p.profile_id == profile_id), None)
@@ -1046,6 +1067,163 @@ class GuiCore:
             self._launch_manager.stop(profile_id)
         except Exception as exc:  # pylint: disable=broad-except
             self._on_launch_status(profile_id, NodeLaunchStatus.ERROR, None, str(exc))
+
+    def start_visualization(self) -> None:
+        """可視化用launchをまとめて起動する。"""
+
+        with self._lock:
+            status = self._visualization_state.status
+            if status in (
+                NodeLaunchStatus.STARTING,
+                NodeLaunchStatus.RUNNING,
+                NodeLaunchStatus.STOPPING,
+            ):
+                return
+            self._visualization_state.status = NodeLaunchStatus.STARTING
+            self._visualization_state.error_message = ""
+
+        popen_options = self._build_popen_options()
+        processes: Dict[str, subprocess.Popen[str]] = {}
+        try:
+            for key, (package, launch_file) in self._visualization_targets().items():
+                args = ["ros2", "launch", package, launch_file]
+                process = subprocess.Popen(
+                    args,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    text=True,
+                    **popen_options,
+                )
+                processes[key] = process
+        except Exception as exc:  # pylint: disable=broad-except
+            for process in processes.values():
+                self._terminate_subprocess(process)
+            with self._lock:
+                self._visualization_state.status = NodeLaunchStatus.ERROR
+                self._visualization_state.error_message = str(exc)
+                self._visualization_processes.clear()
+                self._visualization_state.process_ids = {}
+            return
+
+        with self._lock:
+            self._visualization_processes = processes
+            self._visualization_state.process_ids = {
+                key: process.pid for key, process in processes.items()
+            }
+            self._visualization_state.status = NodeLaunchStatus.RUNNING
+
+        for key, process in processes.items():
+            thread = threading.Thread(
+                target=self._monitor_visualization_process,
+                args=(key, process),
+                daemon=True,
+            )
+            thread.start()
+            self._visualization_threads.append(thread)
+
+    def stop_visualization(self) -> None:
+        """起動中の可視化launchを停止する。"""
+
+        with self._lock:
+            processes = list(self._visualization_processes.items())
+            self._visualization_state.status = NodeLaunchStatus.STOPPING
+        if not processes:
+            with self._lock:
+                self._visualization_state.status = NodeLaunchStatus.STOPPED
+                self._visualization_state.process_ids = {}
+            return
+
+        for _key, process in processes:
+            self._terminate_subprocess(process)
+        with self._lock:
+            self._visualization_processes.clear()
+            self._visualization_state.process_ids = {}
+            if self._visualization_state.status != NodeLaunchStatus.ERROR:
+                self._visualization_state.status = NodeLaunchStatus.STOPPED
+
+    def _monitor_visualization_process(
+        self, key: str, process: subprocess.Popen[str]
+    ) -> None:
+        """可視化launch終了を監視し状態を更新する。"""
+
+        return_code = process.wait()
+        error_message = ""
+        if return_code != 0:
+            error_message = f"{key} が異常終了しました (return code={return_code})"
+
+        with self._lock:
+            self._visualization_processes.pop(key, None)
+            self._visualization_state.process_ids[key] = None
+            if error_message and not self._visualization_state.error_message:
+                self._visualization_state.error_message = error_message
+            running_remains = any(
+                proc.poll() is None for proc in self._visualization_processes.values()
+            )
+            if running_remains:
+                if self._visualization_state.status == NodeLaunchStatus.STARTING:
+                    self._visualization_state.status = NodeLaunchStatus.RUNNING
+            else:
+                if self._visualization_state.error_message:
+                    self._visualization_state.status = NodeLaunchStatus.ERROR
+                elif self._visualization_state.status != NodeLaunchStatus.STOPPING:
+                    self._visualization_state.status = NodeLaunchStatus.STOPPED
+                else:
+                    self._visualization_state.status = NodeLaunchStatus.STOPPED
+                self._visualization_state.process_ids = {}
+
+    @staticmethod
+    def _visualization_targets() -> Dict[str, tuple[str, str]]:
+        """起動対象の可視化launchを返す。"""
+
+        return {
+            'route_markers': ('route_manager', 'active_route_marker.launch.py'),
+            'target_marker': ('route_follower', 'active_target_marker.launch.py'),
+            'rviz': ('robot_console', 'robot_console_rviz.launch.py'),
+        }
+
+    @staticmethod
+    def _build_popen_options() -> Dict[str, object]:
+        """サブプロセス起動時のオプションを構築する。"""
+
+        options: Dict[str, object] = {}
+        if os.name == 'nt':
+            options['creationflags'] = subprocess.CREATE_NEW_PROCESS_GROUP
+        else:
+            options['preexec_fn'] = os.setsid
+        return options
+
+    @staticmethod
+    def _terminate_subprocess(process: subprocess.Popen[str]) -> None:
+        """SIGINT→SIGTERM→SIGKILL の順で停止要求を送る。"""
+
+        if process.poll() is not None:
+            return
+        try:
+            process.send_signal(signal.SIGINT)
+        except Exception:  # pylint: disable=broad-except
+            pass
+        try:
+            process.wait(timeout=5.0)
+            return
+        except subprocess.TimeoutExpired:
+            pass
+        try:
+            process.terminate()
+        except Exception:  # pylint: disable=broad-except
+            pass
+        try:
+            process.wait(timeout=3.0)
+            return
+        except subprocess.TimeoutExpired:
+            pass
+        try:
+            process.kill()
+        except Exception:  # pylint: disable=broad-except
+            pass
+        try:
+            process.wait(timeout=1.0)
+        except Exception:  # pylint: disable=broad-except
+            pass
 
     def _apply_param_update(self, payload: Dict[str, object]) -> None:
         profile_id = payload.get('profile_id')

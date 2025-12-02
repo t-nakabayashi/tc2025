@@ -137,6 +137,15 @@ class NodeLaunchState:
     error_message: str = ""
 
 
+@dataclass
+class VisualizationState:
+    """RVizおよび可視化ノードの起動状態を表すデータクラス。"""
+
+    status: NodeLaunchStatus = NodeLaunchStatus.STOPPED
+    process_ids: Dict[str, Optional[int]] = field(default_factory=dict)
+    error_message: str = ""
+
+
 class GuiCommandType(Enum):
     """GUI から発行されるコマンドの種類。"""
 
@@ -154,6 +163,8 @@ class GuiCommandType(Enum):
     TOGGLE_SIMULATOR = auto()
     UPDATE_OVERRIDE = auto()
     SWITCH_LAUNCH_FILE = auto()
+    START_VISUALIZATION = auto()
+    STOP_VISUALIZATION = auto()
 
 
 @dataclass
@@ -178,6 +189,7 @@ class GuiSnapshot:
     launch_states: Dict[str, NodeLaunchState]
     console_logs: Dict[str, List[str]]
     console_log_paths: Dict[str, Optional[str]] = field(default_factory=dict)
+    visualization_state: VisualizationState = field(default_factory=VisualizationState)
 
 
 class ConsoleLogBuffer:
