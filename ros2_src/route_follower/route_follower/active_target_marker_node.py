@@ -24,7 +24,7 @@ class ActiveTargetMarkerNode(Node):
             depth=5,
         )
         qos_marker = QoSProfile(
-            reliability=ReliabilityPolicy.BEST_EFFORT,
+            reliability=ReliabilityPolicy.RELIABLE,
             durability=DurabilityPolicy.VOLATILE,
             history=HistoryPolicy.KEEP_LAST,
             depth=5,
