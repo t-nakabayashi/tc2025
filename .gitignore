@@ -210,3 +210,13 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Binary and large data files
+*.npy
+*.npz
+*.mp4
+*.avi
+*.mov
+*.mkv
+*.pcd
+*.bag
