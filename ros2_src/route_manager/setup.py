@@ -17,7 +17,10 @@ def list_data_files(target_dir: str) -> List[Tuple[str, List[str]]]:
 
 data_files = [
     ('share/ament_index/resource_index/packages', ['resource/' + package_name]),
-    ('share/' + package_name + '/launch', ['launch/route_manager.launch.py']),
+    (
+        'share/' + package_name + '/launch',
+        ['launch/route_manager.launch.py', 'launch/active_route_marker.launch.py'],
+    ),
     ('share/' + package_name, ['package.xml']),
 ]
 
@@ -39,6 +42,7 @@ setup(
     entry_points={
         'console_scripts': [
             'route_manager = route_manager.route_manager_node:main',
+            'active_route_marker = route_manager.route_markers_node:main',
         ],
     },
 )
