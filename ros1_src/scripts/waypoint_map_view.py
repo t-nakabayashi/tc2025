@@ -90,64 +90,29 @@ class WaypointMapView:
                     marker_data.pose.orientation.z = float(row[8])
                     marker_data.pose.orientation.w = float(row[9])
 
-                    if int(row[10]) == 1:
+                    # 色分け: line_is_stop=row[12], signal_is_stop=row[13]
+                    if int(row[12]) == 1:
+                        # line_is_stop: 赤
                         marker_data.color.r = 1.0
                         marker_data.color.g = 0.0
                         marker_data.color.b = 0.0
                         marker_data.color.a = 1.0
-                        marker_data.scale.x = 2
-                        marker_data.scale.y = 0.1
-                        marker_data.scale.z = 0.1
-                    elif int(row[11]) == 1:
+                    elif int(row[13]) == 1:
+                        # signal_is_stop: 黄
                         marker_data.color.r = 1.0
                         marker_data.color.g = 1.0
                         marker_data.color.b = 0.0
                         marker_data.color.a = 1.0
-                        marker_data.scale.x = 2
-                        marker_data.scale.y = 0.1
-                        marker_data.scale.z = 0.1
-                    elif float(row[9]) > 0:
-                        if float(row[9]) < 1:
-                            marker_data.color.r = 0.0
-                            marker_data.color.g = 0.0
-                            marker_data.color.b = 1.0
-                            marker_data.color.a = 1.0
-                            marker_data.scale.x = 1
-                            marker_data.scale.y = 0.1
-                            marker_data.scale.z = 0.1
-                        else:
-                            marker_data.color.r = 0.0
-                            marker_data.color.g = 0.0
-                            marker_data.color.b = 1.0
-                            marker_data.color.a = 1.0
-                            marker_data.scale.x = 2
-                            marker_data.scale.y = 0.1
-                            marker_data.scale.z = 0.1
-                    elif float(row[8]) > 0:
-                        if float(row[8]) < 1:
-                            marker_data.color.r = 1.0
-                            marker_data.color.g = 1.0
-                            marker_data.color.b = 1.0
-                            marker_data.color.a = 1.0
-                            marker_data.scale.x = 1
-                            marker_data.scale.y = 0.1
-                            marker_data.scale.z = 0.1
-                        else:
-                            marker_data.color.r = 1.0
-                            marker_data.color.g = 1.0
-                            marker_data.color.b = 1.0
-                            marker_data.color.a = 1.0
-                            marker_data.scale.x = 2
-                            marker_data.scale.y = 0.1
-                            marker_data.scale.z = 0.1
                     else:
+                        # デフォルト: 緑
                         marker_data.color.r = 0.0
                         marker_data.color.g = 1.0
                         marker_data.color.b = 0.0
                         marker_data.color.a = 1.0
-                        marker_data.scale.x = 2
-                        marker_data.scale.y = 0.1
-                        marker_data.scale.z = 0.1
+
+                    marker_data.scale.x = 2
+                    marker_data.scale.y = 0.1
+                    marker_data.scale.z = 0.1
 
                     marker_data.lifetime = rospy.Duration()
 
