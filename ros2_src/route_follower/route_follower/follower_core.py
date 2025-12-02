@@ -46,6 +46,10 @@ class Pose:
     x: float
     y: float
     yaw: float = 0.0
+    orientation_x: float | None = None
+    orientation_y: float | None = None
+    orientation_z: float | None = None
+    orientation_w: float | None = None
 
 
 @dataclass
