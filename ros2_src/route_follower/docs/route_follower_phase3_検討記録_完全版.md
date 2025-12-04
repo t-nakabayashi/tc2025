@@ -187,6 +187,7 @@ RUNNING
 
 ### 11.5 実装状況（recog_flag 連携）
 - RouteFollowerNode に `recog_flag` Publisher を追加し、WAITING_STOP で `signal_stop=True` のウェイポイント待機中のみ `1` をラッチ送信、それ以外の状態では `0` を送る。初期化時に `0` をラッチし、フラグ変化時のみ Publish することでブリッジ帯域を抑制する。【F:ros2_src/route_follower/route_follower/route_follower_node.py†L134-L200】【F:ros2_src/route_follower/route_follower/route_follower_node.py†L302-L444】
+- `recog_flag` を ROS1 側に橋渡ししやすいよう、launch ファイルに `recog_flag_topic` のリマップ引数を追加し、デフォルトで `/recog_flag` を出力する設定を提供した。【F:ros2_src/route_follower/launch/route_follower.launch.py†L34-L96】
 - `tc2023_signal_detector` は `recog_flag` サブスクライバで最新値をキャッシュし、待機ループ・推論ループはキャッシュ値を参照する構造へ改修済み。`recog_flag` が `0` に戻った時点で検出ループを抜け、単発 Publish にも追従する。【F:ros1_src/scripts/tc2023_signal_detector.py†L15-L182】
 
 ---

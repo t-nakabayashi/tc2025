@@ -41,13 +41,18 @@ def generate_launch_description() -> LaunchDescription:
         'amcl_pose_topic', default_value='/amcl_pose', description='現在位置Poseトピック名'
     )
     obstacle_hint_topic_arg = DeclareLaunchArgument(
-        'obstacle_hint_topic', default_value='/obstacle_avoidance_hint', description='障害物ヒント入力トピック名'
+        'obstacle_hint_topic',
+        default_value='/obstacle_avoidance_hint',
+        description='障害物ヒント入力トピック名',
     )
     manual_start_topic_arg = DeclareLaunchArgument(
         'manual_start_topic', default_value='/manual_start', description='手動スタートトピック名'
     )
     signal_recognition_topic_arg = DeclareLaunchArgument(
         'signal_recognition_topic', default_value='/sig_recog', description='信号判定入力トピック名'
+    )
+    recog_flag_topic_arg = DeclareLaunchArgument(
+        'recog_flag_topic', default_value='/recog_flag', description='信号検出開始フラグ出力トピック名'
     )
     active_target_topic_arg = DeclareLaunchArgument(
         'active_target_topic', default_value='/active_target', description='ターゲットPose出力トピック名'
@@ -72,6 +77,7 @@ def generate_launch_description() -> LaunchDescription:
     obstacle_hint_topic = LaunchConfiguration('obstacle_hint_topic')
     manual_start_topic = LaunchConfiguration('manual_start_topic')
     signal_recognition_topic = LaunchConfiguration('signal_recognition_topic')
+    recog_flag_topic = LaunchConfiguration('recog_flag_topic')
     active_target_topic = LaunchConfiguration('active_target_topic')
     follower_state_topic = LaunchConfiguration('follower_state_topic')
     report_stuck_service = LaunchConfiguration('report_stuck_service')
@@ -98,6 +104,7 @@ def generate_launch_description() -> LaunchDescription:
             ('obstacle_avoidance_hint', obstacle_hint_topic),
             ('manual_start', manual_start_topic),
             ('sig_recog', signal_recognition_topic),
+            ('recog_flag', recog_flag_topic),
             ('active_target', active_target_topic),
             ('follower_state', follower_state_topic),
             ('report_stuck', report_stuck_service),
@@ -117,6 +124,7 @@ def generate_launch_description() -> LaunchDescription:
         obstacle_hint_topic_arg,
         manual_start_topic_arg,
         signal_recognition_topic_arg,
+        recog_flag_topic_arg,
         active_target_topic_arg,
         follower_state_topic_arg,
         report_stuck_service_arg,
