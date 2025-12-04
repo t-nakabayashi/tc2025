@@ -11,8 +11,9 @@
   2) 残りの waypoint のうち node が非負（数値/文字列を含む）の行を、最も近いノードの id に置換。
   3) セグメントを variable/segments/edge_端点A_端点B.csv として保存（端点行を含め、保存時は node 列を削除）。
      - セグメント内の label は、端点は node 値（ノードID）に、中間は 先頭端点ID + "_n"。
-  4) variable/segments/ 内の全 edge_*.csv を走査し、
-     variable/edges.csv を生成（列: source, target, waypoint_list, reversible）。
+    4) variable/segments/ 内の全 edge_*.csv を走査し、
+     variable/edges.csv を生成（列: source, target, waypoint_list, reversible,
+     weight_factor=1）。
      - waypoint_list は edge CSV の相対パス。
      - 逆方向 edge_端点B_端点A.csv が存在する場合 reversible=0、無い場合 1。
 
@@ -346,9 +347,10 @@ def _parse_edge_filename(edge_csv_path: Path) -> Optional[Tuple[str, str]]:
 def build_edge_list(out_dir_segments: Path, out_path_edges: Path) -> None:
     """segmentsディレクトリ内の全 edge_*.csv から edges.csv を生成.
 
-    edges.csv 列: source, target, waypoint_list, reversible
+    edges.csv 列: source, target, waypoint_list, reversible, weight_factor
     - waypoint_list には各 edge CSV の相対パス（例: variable/segments/edge_C1_C2.csv）
     - reversible は逆方向ファイルが「存在すれば 0、無ければ 1」
+    - weight_factor は係数 1 固定で出力し、ルート作成時のデフォルト値を表す
     """
     ensure_dir(out_dir_segments)
     edge_files = list(out_dir_segments.glob("edge_*.csv"))
@@ -363,17 +365,18 @@ def build_edge_list(out_dir_segments: Path, out_path_edges: Path) -> None:
         edge_map[(src, tgt)] = f
 
     # reversible 判定＆レコード作成
-    records: List[Tuple[str, str, str, int]] = []
+    records: List[Tuple[str, str, str, int, int]] = []
     for (src, tgt), path in edge_map.items():
         reverse_exists = (tgt, src) in edge_map
         reversible = 0 if reverse_exists else 1
         rel_path = str(Path("variable/segments") / path.name)
-        records.append((src, tgt, rel_path, reversible))
+        records.append((src, tgt, rel_path, reversible, 1))
 
     # 出力
     ensure_dir(out_path_edges.parent)
     df_edges = pd.DataFrame(
-        records, columns=["source", "target", "waypoint_list", "reversible"]
+        records,
+        columns=["source", "target", "waypoint_list", "reversible", "weight_factor"],
     )
     df_edges = df_edges.sort_values(by=["source", "target"]).reset_index(drop=True)
     df_edges.to_csv(out_path_edges, index=False, encoding="utf-8")

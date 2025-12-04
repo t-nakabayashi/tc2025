@@ -14,9 +14,10 @@
 
 【入力仕様（CSV）】
 - nodes.csv: id,lat,lon
-- edges.csv: source,target,segment_id,reversible
+- edges.csv: source,target,segment_id,reversible[,weight_factor]
   - segment_id は Waypoint CSV（セグメント）のファイルパス
   - reversible は 0/1, true/false, yes/no（大小無視）
+  - weight_factor は正の実数。指定があればセグメント長に係数を掛けて重みとする
 - Waypoint CSV（セグメント）:
   - いずれかの形式: (x,y) または (lat,lon) / (lon,lat)
 
@@ -142,6 +143,23 @@ def _parse_bool(value: Any) -> bool:
     return v in ("1", "true", "t", "yes", "y")
 
 
+def _parse_weight_factor(value: Any) -> float:
+    """重み係数を正の実数として解釈する。"""
+
+    if value is None or str(value).strip() == "":
+        return 1.0
+
+    try:
+        factor = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("edges.csv: weight_factor must be a positive number.") from exc
+
+    if factor <= 0:
+        raise ValueError("edges.csv: weight_factor must be a positive number.")
+
+    return factor
+
+
 def load_edges_csv(path: str) -> List[Dict[str, Any]]:
     """edges.csv を読み込む。source,target,segment_id,reversible 形式（waypoint_list でも可）。"""
     edges: List[Dict[str, Any]] = []
@@ -154,7 +172,16 @@ def load_edges_csv(path: str) -> List[Dict[str, Any]]:
             if not seg:
                 raise ValueError("edges.csv: 'segment_id' or 'waypoint_list' is required.")
             rev = _parse_bool(row.get("reversible", "0"))
-            edges.append({"source": src, "target": tgt, "segment_id": seg, "reversible": rev})
+            factor = _parse_weight_factor(row.get("weight_factor", 1.0))
+            edges.append(
+                {
+                    "source": src,
+                    "target": tgt,
+                    "segment_id": seg,
+                    "reversible": rev,
+                    "weight_factor": factor,
+                }
+            )
     return edges
 
 
@@ -320,6 +347,7 @@ def solve_variable_route(
             "target": tgt,
             "segment_id": str(seg),
             "reversible": _parse_bool(e.get("reversible", False)),
+            "weight_factor": _parse_weight_factor(e.get("weight_factor", 1.0)),
         })
     edges = normalized_edges
 
@@ -334,10 +362,18 @@ def solve_variable_route(
 
     for e in edges:
         u, v, seg, rev = e["source"], e["target"], e["segment_id"], e["reversible"]
-        length_m = seg_len(seg)
-        dir_edge[(u, v)] = {"segment_id": seg, "reversible": bool(rev), "length": length_m}
+        weighted_length_m = seg_len(seg) * e.get("weight_factor", 1.0)
+        dir_edge[(u, v)] = {
+            "segment_id": seg,
+            "reversible": bool(rev),
+            "length": weighted_length_m,
+        }
         if rev:
-            dir_edge[(v, u)] = {"segment_id": seg, "reversible": True, "length": length_m}
+            dir_edge[(v, u)] = {
+                "segment_id": seg,
+                "reversible": True,
+                "length": weighted_length_m,
+            }
 
     # reversible=0 の対向不足チェック
     for (u, v), meta in list(dir_edge.items()):
@@ -734,16 +770,25 @@ def _rebuild_graph_for_terminals(
             "target": str(e["target"]),
             "segment_id": str(seg),
             "reversible": _parse_bool(e.get("reversible", False)),
+            "weight_factor": _parse_weight_factor(e.get("weight_factor", 1.0)),
         })
 
     # まず両方向の「有向エッジ」集合を作り、のちに無向化（両方向があれば平均）
     dir_edge: Dict[Tuple[str, str], Dict[str, Any]] = {}
     for e in normalized_edges:
         u, v, seg, rev = e["source"], e["target"], e["segment_id"], e["reversible"]
-        length_m = _load_waypoint_csv_length(seg)[0]
-        dir_edge[(u, v)] = {"segment_id": seg, "reversible": bool(rev), "length": length_m}
+        length_m = _load_waypoint_csv_length(seg)[0] * e.get("weight_factor", 1.0)
+        dir_edge[(u, v)] = {
+            "segment_id": seg,
+            "reversible": bool(rev),
+            "length": length_m,
+        }
         if rev:
-            dir_edge[(v, u)] = {"segment_id": seg, "reversible": True, "length": length_m}
+            dir_edge[(v, u)] = {
+                "segment_id": seg,
+                "reversible": True,
+                "length": length_m,
+            }
 
     # 無向化（solve と同等の重みルール）
     G = nx.Graph()
@@ -766,7 +811,14 @@ def _rebuild_graph_for_terminals(
 def main() -> None:
     parser = argparse.ArgumentParser(description="Variable-route solver (TSP path over undirected graph)")
     parser.add_argument("--nodes", required=True, help="Path to nodes.csv (columns: id,lat,lon)")
-    parser.add_argument("--edges", required=True, help="Path to edges.csv (columns: source,target,segment_id|waypoint_list,reversible)")
+    parser.add_argument(
+        "--edges",
+        required=True,
+        help=(
+            "Path to edges.csv (columns: source,target,segment_id|waypoint_list,reversible"
+            "[,weight_factor])"
+        ),
+    )
     parser.add_argument("--start", required=True, help="Start node id")
     parser.add_argument("--goal", required=True, help="Goal node id")
     parser.add_argument("--checkpoints", required=True, help="Comma-separated checkpoint node ids (>=1)")
