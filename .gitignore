@@ -220,3 +220,7 @@ __marimo__/
 *.mkv
 *.pcd
 *.bag
+
+# Calibration and temporary data
+yaw_offset.yaml
+rotation_matrix.txt
