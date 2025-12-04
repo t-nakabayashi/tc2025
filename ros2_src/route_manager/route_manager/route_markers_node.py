@@ -3,8 +3,9 @@
 """/active_route を MarkerArray へ変換して配信するノード."""
 from __future__ import annotations
 
+import copy
 import math
-from typing import List
+from typing import List, Optional
 
 import rclpy
 from rclpy.node import Node
@@ -53,6 +54,8 @@ class ActiveRouteMarkerNode(Node):
         self.pub_markers = self.create_publisher(
             MarkerArray, "active_route/markers", qos_marker
         )
+        self._latest_marker_array: Optional[MarkerArray] = None
+        self._republish_timer = self.create_timer(1.0, self._republish_last_markers)
 
         self.get_logger().info("active_route_marker node started.")
 
@@ -65,6 +68,7 @@ class ActiveRouteMarkerNode(Node):
 
         if not msg.waypoints:
             self.get_logger().warn("/active_route が空のためMarkerを削除して終了します。")
+            self._latest_marker_array = marker_array
             self.pub_markers.publish(marker_array)
             return
 
@@ -79,7 +83,25 @@ class ActiveRouteMarkerNode(Node):
         marker_array.markers.extend(waypoint_markers)
         marker_array.markers.extend(label_markers)
 
+        self._latest_marker_array = marker_array
         self.pub_markers.publish(marker_array)
+
+    def _republish_last_markers(self) -> None:
+        """最新MarkerArrayを再送し、RViz後起動時の描画抜けを防ぐ."""
+
+        if self._latest_marker_array is None:
+            return
+        if self.pub_markers.get_subscription_count() == 0:
+            return
+
+        refreshed = MarkerArray()
+        now_stamp = self.get_clock().now().to_msg()
+        for marker in self._latest_marker_array.markers:
+            updated_marker = copy.deepcopy(marker)
+            updated_marker.header.stamp = now_stamp
+            refreshed.markers.append(updated_marker)
+
+        self.pub_markers.publish(refreshed)
 
     def _build_header(self, src_header: Header) -> Header:
         """受信ヘッダーを元に可視化用ヘッダーを生成する."""
