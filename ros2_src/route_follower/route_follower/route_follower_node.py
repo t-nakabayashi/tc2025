@@ -40,6 +40,7 @@ from follower_core import (
     Waypoint as CoreWaypoint,
     Route as CoreRoute,
     HintSample,
+    FollowerStatus,
 )
 
 
@@ -137,6 +138,7 @@ class RouteFollowerNode(Node):
         obstacle_hint_topic = 'obstacle_avoidance_hint'
         manual_start_topic = 'manual_start'
         signal_recognition_topic = 'sig_recog'
+        recog_flag_topic = 'recog_flag'
         road_block_topic = 'road_blocked'
         active_target_topic = 'active_target'
         follower_state_topic = 'follower_state'
@@ -161,6 +163,8 @@ class RouteFollowerNode(Node):
 
         self.pub_target = self.create_publisher(PoseStamped, active_target_topic, self.qos_vol)
         self.pub_state = self.create_publisher(FollowerState, follower_state_topic, self.qos_vol)
+        # recog_flag は値変化時のみ送るため、標準のVolatile QoSを使用する。
+        self.pub_recog_flag = self.create_publisher(Int32, recog_flag_topic, self.qos_vol)
 
         self.cli_report_stuck = self.create_client(ReportStuck, report_stuck_service)
 
@@ -170,6 +174,7 @@ class RouteFollowerNode(Node):
         self.obstacle_hint_topic = self._resolve_topic_name(obstacle_hint_topic)
         self.manual_start_topic = self._resolve_topic_name(manual_start_topic)
         self.signal_recognition_topic = self._resolve_topic_name(signal_recognition_topic)
+        self.recog_flag_topic = self._resolve_topic_name(recog_flag_topic)
         self.road_block_topic = self._resolve_topic_name(road_block_topic)
         self.active_target_topic = self._resolve_topic_name(active_target_topic)
         self.follower_state_topic = self._resolve_topic_name(follower_state_topic)
@@ -192,6 +197,8 @@ class RouteFollowerNode(Node):
         # follower_stateの周期ログ用タイムスタンプを初期化する。
         self._last_state_log_time: float = 0.0
         self._latest_pose_stamped: Optional[PoseStamped] = None
+        self._last_recog_flag: Optional[int] = None
+        self._publish_recog_flag(0, log=False, force=True)
 
     def _resolve_topic_name(self, name: str) -> str:
         """リマップ適用後のトピック名を取得する。"""
@@ -296,6 +303,7 @@ class RouteFollowerNode(Node):
 
     def _on_timer(self) -> None:
         """設定された制御周期ごとに Core.tick() を実行する."""
+        previous_status = self.core.status
         output = self.core.tick()
 
         # active_target 出力
@@ -303,6 +311,9 @@ class RouteFollowerNode(Node):
 
         # follower_state 出力
         self._handle_state_publish(output)
+
+        # recog_flag 出力
+        self._update_recog_flag(previous_status)
 
         # /report_stuck応答の反映
         self._process_report_stuck_result()
@@ -404,6 +415,41 @@ class RouteFollowerNode(Node):
                 f"route_ver={msg.route_version}, avoid_count={msg.avoidance_attempt_count}"
             )
             self._last_state_log_time = now_sec
+
+    def _update_recog_flag(self, previous_status: FollowerStatus) -> None:
+        """現在の状態とWP属性に応じてrecog_flagをpublishする。"""
+        if (
+            previous_status == FollowerStatus.IDLE
+            and self.core.status == FollowerStatus.RUNNING
+        ):
+            # RUNNINGへ移行したタイミングで起動直後の0を再送する。
+            self._publish_recog_flag(0, force=True)
+        desired_flag = self._compute_recog_flag()
+        self._publish_recog_flag(desired_flag)
+
+    def _compute_recog_flag(self) -> int:
+        """信号停止WP待機中のみ1を返し、それ以外は0を返す。"""
+        wp = self.core.get_current_waypoint()
+        if (
+            wp is not None
+            and self.core.status == FollowerStatus.WAITING_STOP
+            and wp.signal_stop
+        ):
+            return 1
+        return 0
+
+    def _publish_recog_flag(self, flag: int, log: bool = True, force: bool = False) -> None:
+        """recog_flagの変化時のみ、もしくはforce指定時に発行する。"""
+        if not force and self._last_recog_flag == flag:
+            return
+        msg = Int32()
+        msg.data = int(flag)
+        self.pub_recog_flag.publish(msg)
+        self._last_recog_flag = int(flag)
+        if log:
+            self.get_logger().info(
+                f"[Node] publish {self.recog_flag_topic}: flag={flag}"
+            )
 
     # ========================================================
     # stuck報告
