@@ -81,9 +81,10 @@ CSV の Waypoint は `segment_id` 単位でキャッシュされ、進行方向�
 
 ### CSV 仕様
 - Waypoint CSV: `label,latitude,longitude,x,y,z,q1,q2,q3,q4,right_is_open,left_is_open,line_is_stop,signal_is_stop,isnot_skipnum`
-- グラフ CSV: `nodes.csv`（`id,lat,lon,...`）、`edges.csv`（`source,target,waypoint_list,reversible`）
+- グラフ CSV: `nodes.csv`（`id,lat,lon,...`）、`edges.csv`（`source,target,waypoint_list,reversible[,weight_factor]`）
 
 `waypoint_list` には Waypoint CSV への相対パスを記述します。`reversible=0` の場合は片方向エッジとして扱われます。
+`weight_factor` は任意の正の実数で、指定するとセグメント長に係数を掛けた重みでグラフ探索を行います。
 
 ### `/get_route` の処理
 1. `blocks` を順番に処理し、固定ブロックは CSV を連結、可変ブロックは最短経路を探索する。
