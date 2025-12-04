@@ -9,6 +9,22 @@ import numpy as np
 import torch
 import argparse
 import time
+import threading
+
+
+recog_flag_lock = threading.Lock()
+recog_flag_cache = 0
+
+def on_recog_flag(msg):
+    global recog_flag_cache
+    with recog_flag_lock:
+        recog_flag_cache = int(msg.data)
+
+
+def get_recog_flag():
+    with recog_flag_lock:
+        return recog_flag_cache
+
 
 # "/usb_cam/image_raw"という名前のROSトピックを画像として受信
 def receive_image():
@@ -19,7 +35,7 @@ def receive_image():
 # YOLOv5による物体検出を実行
 def detect_object(image):
     y = model(image)
-    detections = y.pandas().xyxy[0]  
+    detections = y.pandas().xyxy[0]
 
     return detections
 
@@ -116,26 +132,14 @@ def publish_sig_recog(sig_recog):
     sig_pub = rospy.Publisher('sig_recog', Int32, queue_size=1)
     sig_pub.publish(sig_recog)
 
-# "recog_flag"という名前のROSトピックを受信するまで処理を待機
-#def wait_for_recog_flag():
-#    while True:
-#        recog_flag = rospy.wait_for_message('recog_flag', Int32, timeout=None)
-#        if recog_flag.data == 1:
-#            break
-
-def monitoring_recog_flag():
-    flag = rospy.wait_for_message('recog_flag', Int32)
-    return flag
-
 def wait_for_recog_flag():
-    while True:
-        recog_flag = monitoring_recog_flag()
-        print ("recog_flag: ", recog_flag)
-        if recog_flag.data == 1:
+    rate = rospy.Rate(5)
+    while not rospy.is_shutdown():
+        if get_recog_flag() == 1:
             break
-        else:
-            image = receive_image()
-            publish_det_imgs(image)
+        image = receive_image()
+        publish_det_imgs(image)
+        rate.sleep()
 
 if __name__ == '__main__':
 
@@ -155,21 +159,26 @@ if __name__ == '__main__':
     # モデルの検出閾値を設定
     model.conf = det_thresh
 
+    rospy.Subscriber('recog_flag', Int32, on_recog_flag, queue_size=1)
+
     # 本ループ処理
-    while True:
+    while not rospy.is_shutdown():
         print ("wait for recog_flag...")
 
         # "recog_flag"という名前のROSトピックを受信するまで処理を待機
         wait_for_recog_flag()
 
+        if rospy.is_shutdown():
+            break
+
         print ("detection start")
 
         pred_sigs = []
         isJudged = False
-        
+
         # 検出ループ処理
         # recog_flagが1のとき無限ループ
-        while (rospy.wait_for_message('recog_flag', Int32, timeout=None)).data == 1:
+        while not rospy.is_shutdown() and get_recog_flag() == 1:
 
             start = time.time()
 
