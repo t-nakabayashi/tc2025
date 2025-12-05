@@ -85,6 +85,18 @@ def generate_launch_description() -> LaunchDescription:
                 'publish_tf': True,
                 'pose_noise_std_m': 0.0,
                 'yaw_noise_std_deg': 0.0,
+                'enable_glitch_trigger': True,
+                'glitch_trigger_topic': '/amcl_glitch_trigger',
+                'glitch_cooldown_sec': 5.0,
+                'glitch_wait_after_stop_sec': 5.0,
+                'glitch_radius_min_m': 2.0,
+                'glitch_radius_max_m': 3.0,
+                'glitch_yaw_min_deg': 60.0,
+                'glitch_yaw_max_deg': 90.0,
+                'glitch_cov_floor_m2': 0.25,
+                'glitch_yaw_cov_floor_deg2': 25.0,
+                'glitch_linear_stop_threshold': 0.02,
+                'glitch_angular_stop_threshold': 0.02,
             }
         ],
         remappings=[
