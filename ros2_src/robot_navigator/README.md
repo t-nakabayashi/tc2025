@@ -112,9 +112,9 @@ ros2 run robot_navigator robot_navigator
   `glitch_angular_stop_threshold`）未満のときだけトリガを有効化し、走行中の意図しない外れ値挿入を
   防ぎます。
 - **オフセット生成**: 既存のガウスノイズとは別に、`glitch_radius_min_m`〜`glitch_radius_max_m`
-  の一様分布から半径をサンプリングし、方向一様の 2D オフセットとヨー角ガウスノイズ
-  （`glitch_yaw_std_deg`）を単発で加算します。既定値は 1〜2m なので、1m 未満の小さな跳びは
-  発生しません。
+  の一様分布から半径をサンプリングし、方向一様の 2D オフセットとヨー角オフセット
+  （`glitch_yaw_min_deg`〜`glitch_yaw_max_deg` の一様分布を正負ランダム符号で付与）を単発で
+  加算します。既定値は位置 2〜3m、ヨー角 60〜90 度の跳びが必ず発生します。
 - **共分散更新**: 外れ値付与時は共分散の下限を位置 `glitch_cov_floor_m2`、ヨー角
   `glitch_yaw_cov_floor_deg2` に引き上げ、自己位置信頼度低下を表現します。通常 publish 時は従来の
   共分散を使用します。

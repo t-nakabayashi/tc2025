@@ -81,9 +81,10 @@ class RobotSimulatorNode(Node):
         self.declare_parameter('glitch_trigger_topic', '/amcl_glitch_trigger')
         self.declare_parameter('glitch_cooldown_sec', 5.0)
         self.declare_parameter('glitch_wait_after_stop_sec', 5.0)
-        self.declare_parameter('glitch_radius_min_m', 1.0)
-        self.declare_parameter('glitch_radius_max_m', 2.0)
-        self.declare_parameter('glitch_yaw_std_deg', 5.0)
+        self.declare_parameter('glitch_radius_min_m', 2.0)
+        self.declare_parameter('glitch_radius_max_m', 3.0)
+        self.declare_parameter('glitch_yaw_min_deg', 60.0)
+        self.declare_parameter('glitch_yaw_max_deg', 90.0)
         self.declare_parameter('glitch_cov_floor_m2', 0.25)
         self.declare_parameter('glitch_yaw_cov_floor_deg2', 25.0)
         self.declare_parameter('glitch_linear_stop_threshold', 0.02)
@@ -117,7 +118,8 @@ class RobotSimulatorNode(Node):
         self._glitch_radius_max_m: float = float(
             self.get_parameter('glitch_radius_max_m').value
         )
-        self._glitch_yaw_std_deg: float = float(self.get_parameter('glitch_yaw_std_deg').value)
+        self._glitch_yaw_min_deg: float = float(self.get_parameter('glitch_yaw_min_deg').value)
+        self._glitch_yaw_max_deg: float = float(self.get_parameter('glitch_yaw_max_deg').value)
         self._glitch_cov_floor_m2: float = float(self.get_parameter('glitch_cov_floor_m2').value)
         self._glitch_yaw_cov_floor_deg2: float = float(self.get_parameter('glitch_yaw_cov_floor_deg2').value)
         self._glitch_linear_stop_threshold: float = float(
@@ -156,6 +158,15 @@ class RobotSimulatorNode(Node):
             self._glitch_radius_min_m, self._glitch_radius_max_m = (
                 self._glitch_radius_max_m,
                 self._glitch_radius_min_m,
+            )
+
+        if self._glitch_yaw_min_deg > self._glitch_yaw_max_deg:
+            self.get_logger().warn(
+                'glitch_yaw_min_deg が glitch_yaw_max_deg より大きいため値を入れ替えます。'
+            )
+            self._glitch_yaw_min_deg, self._glitch_yaw_max_deg = (
+                self._glitch_yaw_max_deg,
+                self._glitch_yaw_min_deg,
             )
 
         # --- 初期AMCL姿勢保持（map→odom変換） ---
@@ -470,7 +481,8 @@ class RobotSimulatorNode(Node):
         radius = random.uniform(self._glitch_radius_min_m, self._glitch_radius_max_m)
         dx = radius * math.cos(angle)
         dy = radius * math.sin(angle)
-        dyaw = math.radians(random.gauss(0.0, self._glitch_yaw_std_deg))
+        yaw_deg = random.uniform(self._glitch_yaw_min_deg, self._glitch_yaw_max_deg)
+        dyaw = math.radians(yaw_deg if random.random() < 0.5 else -yaw_deg)
         return dx, dy, dyaw
 
 
