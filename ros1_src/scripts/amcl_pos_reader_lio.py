@@ -66,9 +66,16 @@ current_longitude = 0.0
 gps_lock = threading.Lock()
 
 # UTM基準点（つくばチャレンジ用）
-UTM_BASE_LAT = 36.0830041
-UTM_BASE_LON = 140.0763757
+#UTM_BASE_LAT = 36.0830041
+#UTM_BASE_LON = 140.0763757
+#UTM_BASE_ALT = 78.038
+
+
+# inagi
+UTM_BASE_LAT = 35.649727399999996
+UTM_BASE_LON = 139.5025503
 UTM_BASE_ALT = 73.568
+
 
 # joyトピックからのボタン状態を保持
 current_joy_buttons = []  # 押されたボタンの状態リスト

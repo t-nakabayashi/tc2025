@@ -118,7 +118,7 @@ class GPSPoseEstimator:
         """現在のGPS位置からUTM座標を取得"""
         with self.gps_lock:
             if not self.gps_received:
-                return None, None, None
+                return None, None, None, None
 
             lat = self.current_latitude
             lon = self.current_longitude
