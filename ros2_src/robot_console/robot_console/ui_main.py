@@ -52,6 +52,8 @@ from .utils import (
 )
 
 LOGGER = logging.getLogger(__name__)
+# waypoint 間距離として許容する上限値[m]。
+MAX_WAYPOINT_DISTANCE_M = 10.0
 
 FOLLOWER_CARD_KEYS = (
     'state',
@@ -1578,6 +1580,18 @@ class UiMain:
         segment_length = max(follower.segment_length_m, 0.0)
         baseline = max(snapshot.target_distance.baseline_distance_m, 0.0)
         distance_value = segment_length if segment_length > 0.0 else baseline
+        if distance_value > MAX_WAYPOINT_DISTANCE_M:
+            LOGGER.warning(
+                (
+                    "waypoint間距離が閾値を超過したため走行距離の更新をスキップします: "
+                    "index=%d, label=%s, value=%.2f m"
+                ),
+                follower.active_waypoint_index,
+                follower.active_waypoint_label or '-',
+                distance_value,
+            )
+            self._velocity_vars['distance'].set(f"{self._total_distance_m:.1f} m")
+            return
         token = (
             snapshot.route_state.route_version,
             follower.active_waypoint_index,
