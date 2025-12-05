@@ -364,30 +364,6 @@ class RobotSimulatorNode(Node):
         cov_x = max(1e-4, self._pose_noise_std_m ** 2)
         cov_yaw = max(1e-3, math.radians(max(1e-3, self._yaw_noise_std_deg)) ** 2)
 
-        if self._pending_glitch is not None:
-            ready = self._pending_glitch_ready_time is None or (
-                time.time() >= self._pending_glitch_ready_time
-            )
-            if ready and self._is_robot_stopped():
-                dx, dy, dyaw = self._pending_glitch
-                x += dx
-                y += dy
-                yaw = normalize_angle(yaw + dyaw)
-                cov_x = max(cov_x, self._glitch_cov_floor_m2)
-                cov_yaw_floor = math.radians(math.sqrt(self._glitch_yaw_cov_floor_deg2)) ** 2
-                cov_yaw = max(cov_yaw, cov_yaw_floor)
-                self._pending_glitch = None
-                self._pending_glitch_ready_time = None
-                self.get_logger().info(
-                    f'Glitch offset applied: dx={dx:.2f}m, dy={dy:.2f}m, '
-                    f'dyaw={math.degrees(dyaw):.1f}°'
-                )
-            else:
-                self.get_logger().debug('Glitch offset pending until stop/wait period is satisfied.')
-                self._last_published_amcl_stamp = (stamp.sec, stamp.nanosec)
-                self._pub_amcl.publish(msg)
-                return
-
         msg.pose.pose.position.x = x
         msg.pose.pose.position.y = y
         msg.pose.pose.orientation = yaw_to_quaternion(yaw)
@@ -398,6 +374,36 @@ class RobotSimulatorNode(Node):
         msg.pose.covariance = cov
 
         self._last_published_amcl_stamp = (stamp.sec, stamp.nanosec)
+
+        if self._pending_glitch is not None:
+            ready = self._pending_glitch_ready_time is None or (
+                time.time() >= self._pending_glitch_ready_time
+            )
+            if ready and self._is_robot_stopped():
+                dx, dy, dyaw = self._pending_glitch
+                msg.pose.pose.position.x += dx
+                msg.pose.pose.position.y += dy
+                yaw_with_glitch = normalize_angle(yaw + dyaw)
+                msg.pose.pose.orientation = yaw_to_quaternion(yaw_with_glitch)
+
+                cov_x = max(cov_x, self._glitch_cov_floor_m2)
+                cov_yaw_floor = math.radians(math.sqrt(self._glitch_yaw_cov_floor_deg2)) ** 2
+                cov_yaw = max(cov_yaw, cov_yaw_floor)
+                cov[0] = cov[7] = cov_x
+                cov[35] = cov_yaw
+                msg.pose.covariance = cov
+
+                self._pending_glitch = None
+                self._pending_glitch_ready_time = None
+                self.get_logger().info(
+                    f'Glitch offset applied: dx={dx:.2f}m, dy={dy:.2f}m, '
+                    f'dyaw={math.degrees(dyaw):.1f}°'
+                )
+            else:
+                self.get_logger().debug('Glitch offset pending until stop/wait period is satisfied.')
+                self._pub_amcl.publish(msg)
+                return
+
         self._pub_amcl.publish(msg)
 
     def _publish_tf(self) -> None:
