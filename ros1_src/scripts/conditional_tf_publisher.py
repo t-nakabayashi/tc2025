@@ -32,26 +32,32 @@ class ConditionalTFPublisher:
 
     def publish_tf(self):
         """オドメトリデータを基にTFをパブリッシュ"""
-        if not self.odom_data:
-            return
-
-        odom = self.odom_data
-
         # TransformStampedメッセージを作成
         transform = TransformStamped()
         transform.header.stamp = rospy.Time.now()
         transform.header.frame_id = 'odom'
         transform.child_frame_id = 'base_link'
-        transform.transform.translation.x = odom.pose.pose.position.x
-        transform.transform.translation.y = odom.pose.pose.position.y
-        transform.transform.translation.z = 0.0
-        transform.transform.rotation = odom.pose.pose.orientation
+
+        if self.odom_data:
+            # オドメトリデータがある場合はその値を使用
+            odom = self.odom_data
+            transform.transform.translation.x = odom.pose.pose.position.x
+            transform.transform.translation.y = odom.pose.pose.position.y
+            transform.transform.translation.z = 0.0
+            transform.transform.rotation = odom.pose.pose.orientation
+        else:
+            # オドメトリデータがない場合は原点にTFをパブリッシュ
+            # （odomフレームを存在させるため）
+            transform.transform.translation.x = 0.0
+            transform.transform.translation.y = 0.0
+            transform.transform.translation.z = 0.0
+            transform.transform.rotation.x = 0.0
+            transform.transform.rotation.y = 0.0
+            transform.transform.rotation.z = 0.0
+            transform.transform.rotation.w = 1.0
 
         # TFをパブリッシュ
         self.tf_broadcaster.sendTransform(transform)
-
-        # 自分の送信したTFのタイムスタンプを記録
-        self.last_publish_time = transform.header.stamp
 
     def run(self):
         """メインループ"""
