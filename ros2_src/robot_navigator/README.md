@@ -105,9 +105,11 @@ ros2 run robot_navigator robot_navigator
 
 - **トリガトピック**: `/amcl_glitch_trigger`（`std_msgs/Bool`）。`data=true` を受信した瞬間に 1 回
   だけオフセットを予約し、停止状態で `glitch_wait_after_stop_sec`（既定 5 秒）の待機後に
-  `/amcl_pose` へ反映します。走行中にトリガを受けた場合は「停止するまで予約」を保持し、
-  停止とクールダウンを満たしたタイミングから待機を開始します。連続発火を防ぐため、
-  `glitch_cooldown_sec` 経過まで後続トリガは無視します。
+  `/amcl_pose` へ反映します。一度適用されたオフセットは `data=false` を受信するまで同じ値のまま
+  付与され続けます。走行中にトリガを受けた場合は「停止するまで予約」を保持し、停止と
+  クールダウンを満たしたタイミングから待機を開始します。連続発火を防ぐため、
+  `glitch_cooldown_sec` 経過まで後続トリガは無視します。false を送れば予約・適用中の外れ値を
+  即時クリアできます。
 - **停止条件の併用**: `cmd_vel` の線速度・角速度が閾値（`glitch_linear_stop_threshold`、
   `glitch_angular_stop_threshold`）未満のときだけトリガを有効化し、走行中の意図しない外れ値挿入を
   防ぎます。

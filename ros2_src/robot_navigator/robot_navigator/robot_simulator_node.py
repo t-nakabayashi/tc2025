@@ -150,6 +150,7 @@ class RobotSimulatorNode(Node):
         self._pending_glitch_ready_time: Optional[float] = None
         self._glitch_trigger_reserved = False
         self._last_glitch_time = 0.0
+        self._active_glitch: Optional[tuple[float, float, float]] = None
 
         if self._glitch_radius_min_m > self._glitch_radius_max_m:
             self.get_logger().warn(
@@ -280,7 +281,19 @@ class RobotSimulatorNode(Node):
     def _on_glitch_trigger(self, msg: Bool) -> None:
         """停止時に外部トリガで単発オフセットを予約する。"""
         if not msg.data:
-            self.get_logger().debug('Glitch trigger is false → ignored.')
+            canceled = False
+            if self._pending_glitch is not None or self._glitch_trigger_reserved:
+                self.get_logger().info('Glitch trigger false received → pending glitch canceled.')
+                self._pending_glitch = None
+                self._pending_glitch_ready_time = None
+                self._glitch_trigger_reserved = False
+                canceled = True
+            if self._active_glitch is not None:
+                self._active_glitch = None
+                self.get_logger().info('Glitch trigger false received → active glitch cleared.')
+                canceled = True
+            if not canceled:
+                self.get_logger().debug('Glitch trigger is false → nothing to clear.')
             return
 
         if not self._initial_pose_set:
@@ -295,8 +308,15 @@ class RobotSimulatorNode(Node):
             )
             return
 
-        if self._pending_glitch is not None or self._glitch_trigger_reserved:
-            self.get_logger().info('Glitch trigger ignored because a pending glitch exists.')
+        if (
+            self._pending_glitch is not None
+            or self._glitch_trigger_reserved
+            or self._active_glitch is not None
+        ):
+            self.get_logger().info(
+                'Glitch trigger ignored because a glitch is pending or already active. '
+                'Send false to clear if you want to re-trigger.'
+            )
             return
 
         self._last_glitch_time = now
@@ -406,29 +426,32 @@ class RobotSimulatorNode(Node):
                 time.time() >= self._pending_glitch_ready_time
             )
             if ready and self._is_robot_stopped():
-                dx, dy, dyaw = self._pending_glitch
-                msg.pose.pose.position.x += dx
-                msg.pose.pose.position.y += dy
-                yaw_with_glitch = normalize_angle(yaw + dyaw)
-                msg.pose.pose.orientation = yaw_to_quaternion(yaw_with_glitch)
-
-                cov_x = max(cov_x, self._glitch_cov_floor_m2)
-                cov_yaw_floor = math.radians(math.sqrt(self._glitch_yaw_cov_floor_deg2)) ** 2
-                cov_yaw = max(cov_yaw, cov_yaw_floor)
-                cov[0] = cov[7] = cov_x
-                cov[35] = cov_yaw
-                msg.pose.covariance = cov
-
+                self._active_glitch = self._pending_glitch
                 self._pending_glitch = None
                 self._pending_glitch_ready_time = None
+                dx, dy, dyaw = self._active_glitch
                 self.get_logger().info(
-                    f'Glitch offset applied: dx={dx:.2f}m, dy={dy:.2f}m, '
-                    f'dyaw={math.degrees(dyaw):.1f}°'
+                    f'Glitch offset activated: dx={dx:.2f}m, dy={dy:.2f}m, '
+                    f'dyaw={math.degrees(dyaw):.1f}° (kept until trigger false)'
                 )
             else:
                 self.get_logger().debug('Glitch offset pending until stop/wait period is satisfied.')
                 self._pub_amcl.publish(msg)
                 return
+
+        if self._active_glitch is not None:
+            dx, dy, dyaw = self._active_glitch
+            msg.pose.pose.position.x += dx
+            msg.pose.pose.position.y += dy
+            yaw_with_glitch = normalize_angle(yaw + dyaw)
+            msg.pose.pose.orientation = yaw_to_quaternion(yaw_with_glitch)
+
+            cov_x = max(cov_x, self._glitch_cov_floor_m2)
+            cov_yaw_floor = math.radians(math.sqrt(self._glitch_yaw_cov_floor_deg2)) ** 2
+            cov_yaw = max(cov_yaw, cov_yaw_floor)
+            cov[0] = cov[7] = cov_x
+            cov[35] = cov_yaw
+            msg.pose.covariance = cov
 
         self._pub_amcl.publish(msg)
 
