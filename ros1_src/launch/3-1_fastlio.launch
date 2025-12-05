@@ -1,5 +1,12 @@
 <launch>
 
+    <!-- 条件付きTFパブリッシャー: odom→base_link -->
+    <!-- fastlio_mappingが/Odometryを発行する前から原点でodomフレームを確立し、
+         /Odometry受信後は実際の位置をパブリッシュ -->
+    <node pkg="tc2025" type="conditional_tf_publisher.py" name="conditional_tf_publisher" output="screen">
+        <param name="odom_topic" value="/Odometry" />
+    </node>
+
     <node pkg="fast_lio" type="fastlio_mapping" name="laserMapping" output="screen" />
 
 </launch>

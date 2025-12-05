@@ -5,7 +5,7 @@
 yaw_offset計算ノード
 
 /Odometryと/amcl_poseのヨー角偏差を計算し、
-5秒ごとにconfigファイルに保存する
+起動後指定秒数（デフォルト60秒）のデータを収集して一度だけ保存する
 
 偏差の定義: yaw_offset = amcl_pose - Odometry
 """
@@ -28,8 +28,7 @@ class YawOffsetCalculator:
         # パラメータ
         self.output_file = rospy.get_param('~output_file',
             '/home/nkb/catkin_ws/src/tc2025/config/yaw_offset.yaml')
-        self.save_interval = rospy.get_param('~save_interval', 5.0)  # 秒
-        self.time_window = rospy.get_param('~time_window', 30.0)  # 計算に使う時間窓
+        self.collection_time = rospy.get_param('~collection_time', 60.0)  # データ収集時間（秒）
 
         # データ保存用
         self.odom_data = deque()
@@ -40,16 +39,20 @@ class YawOffsetCalculator:
         self.current_offset = 0.0
         self.offset_std = 0.0
 
+        # 保存済みフラグ
+        self.saved = False
+        self.start_time = rospy.Time.now()
+
         # Subscriber
         rospy.Subscriber('/Odometry', Odometry, self.odom_callback)
         rospy.Subscriber('/amcl_pose', PoseWithCovarianceStamped, self.amcl_callback)
 
-        # 保存タイマー
-        rospy.Timer(rospy.Duration(self.save_interval), self.save_callback)
+        # 保存タイマー（collection_time秒後に一度だけ実行）
+        rospy.Timer(rospy.Duration(self.collection_time), self.save_callback, oneshot=True)
 
         rospy.loginfo(f"Yaw offset calculator started")
         rospy.loginfo(f"Output file: {self.output_file}")
-        rospy.loginfo(f"Save interval: {self.save_interval} sec")
+        rospy.loginfo(f"Will save after {self.collection_time} seconds of data collection")
 
     def quaternion_to_yaw(self, q):
         """Quaternionからyaw角を取得"""
@@ -65,30 +68,22 @@ class YawOffsetCalculator:
         return angle
 
     def odom_callback(self, msg):
+        if self.saved:
+            return
         yaw = self.quaternion_to_yaw(msg.pose.pose.orientation)
         t = msg.header.stamp.to_sec()
 
         with self.lock:
             self.odom_data.append((t, yaw))
-            self._cleanup_old_data(t)
 
     def amcl_callback(self, msg):
+        if self.saved:
+            return
         yaw = self.quaternion_to_yaw(msg.pose.pose.orientation)
         t = msg.header.stamp.to_sec()
 
         with self.lock:
             self.amcl_data.append((t, yaw))
-            self._cleanup_old_data(t)
-
-    def _cleanup_old_data(self, current_time):
-        """古いデータを削除"""
-        cutoff_time = current_time - self.time_window
-
-        while self.odom_data and self.odom_data[0][0] < cutoff_time:
-            self.odom_data.popleft()
-
-        while self.amcl_data and self.amcl_data[0][0] < cutoff_time:
-            self.amcl_data.popleft()
 
     def calculate_offset(self):
         """偏差を計算"""
@@ -117,7 +112,10 @@ class YawOffsetCalculator:
         return mean_offset, std_offset
 
     def save_callback(self, event):
-        """偏差をファイルに保存"""
+        """偏差をファイルに保存（一度だけ）"""
+        if self.saved:
+            return
+
         mean_offset, std_offset = self.calculate_offset()
 
         if mean_offset is None:
@@ -141,8 +139,11 @@ class YawOffsetCalculator:
         with open(self.output_file, 'w') as f:
             yaml.dump(data, f, default_flow_style=False)
 
+        self.saved = True
+
         rospy.loginfo(f"Saved yaw_offset: {mean_offset:.4f} rad ({np.degrees(mean_offset):.2f} deg), "
                      f"std: {std_offset:.4f} rad")
+        rospy.loginfo("Data collection complete. No more updates will be saved.")
 
     def run(self):
         rospy.spin()

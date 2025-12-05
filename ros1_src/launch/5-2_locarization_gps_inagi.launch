@@ -1,5 +1,8 @@
 <launch>
-	<!-- 注意: conditional_tf_publisher は 3-1_fastlio.launch で起動されます -->
+    <!-- 条件付きTFパブリッシャーノードを起動 -->
+    <node pkg="tc2025" type="conditional_tf_publisher.py" name="conditional_tf_publisher" output="screen">
+		<param name="odom_topic" value="/Odometry" />
+	</node>
 
 	<!-- Launch file for Livox AVIA LiDAR -->
 	<rosparam command="load" file="$(find tc2025)/config/tc2024_mid_local.yaml" />
@@ -112,6 +115,8 @@
 	<node pkg="tc2025" name="marge_lidar_data" type="marge_lidar_data.py">
 	</node>
 
-
+	<!-- GPS Pose Estimator GUI -->
+	<node pkg="tc2025" name="gps_pose_estimator" type="gps_pose_estimator.py" output="screen">
+	</node>
 
 </launch>

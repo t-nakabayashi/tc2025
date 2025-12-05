@@ -23,6 +23,10 @@ from nav_msgs.msg import Odometry
 UTM_BASE_LAT = 36.0830041
 UTM_BASE_LON = 140.0763757
 
+# inagi
+#UTM_BASE_LAT = 35.649727399999996
+#UTM_BASE_LON = 139.5025503
+
 
 class GPSLocalization:
     def __init__(self):

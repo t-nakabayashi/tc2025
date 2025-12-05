@@ -1,8 +1,4 @@
 <launch>
-    <!-- 条件付きTFパブリッシャーノードを起動 -->
-    <node pkg="tc2025" type="conditional_tf_publisher.py" name="conditional_tf_publisher" output="screen">
-		<param name="odom_topic" value="/Odometry" />
-	</node>
 
 	<!-- Launch file for Livox AVIA LiDAR -->
 	<rosparam command="load" file="$(find tc2025)/config/tc2024_mid_local.yaml" />
@@ -22,7 +18,7 @@
 
 	<rosparam param="footprint" ns="/move_base/local_costmap">[[0.05,-0.1], [0.05,0.1], [-0.3,0.1], [-0.3,-0.1]]</rosparam>
 	<rosparam param="footprint" ns="/move_base/global_costmap">[[0.05,-0.1], [0.05,0.1], [-0.3,0.1], [-0.3,-0.1]]</rosparam>
-	<arg name="waypoint_file" default="/home/nkb/ros/tc2025/ros2_src/route_planner/routes/tsukuba/fixed/fixed_second.csv />
+	<arg name="waypoint_file" default="/home/nkb/ros/tc2025/ros2_src/route_planner/routes/tsukuba/fixed/fixed_second.csv"/>
 	<arg name="map_file_move" default="$(find fast_lio)/PCD/tc2025-fix-2nd/scans_cleaned_2d.yaml" />
 	<arg name="pcd_file" default="$(find fast_lio)/PCD/tc2025-fix-2nd/scans.pcd" />
 	<node respawn="true" name="map_server_move" pkg="map_server" type="map_server" args="$(arg map_file_move)">
@@ -129,16 +125,6 @@
 	<node pkg="tc2025" name="marge_lidar_data" type="marge_lidar_data.py">
 	</node>
 
-	<!-- GPS Pose Estimator GUI -->
-	<node pkg="tc2025" name="gps_pose_estimator" type="gps_pose_estimator.py" output="screen">
-	</node>
 
-	<!-- Yaw Offset Calculator -->
-	<!-- /Odometryと/amcl_poseの偏差を計算し、5秒ごとにファイルに保存 -->
-	<node pkg="tc2025" name="yaw_offset_calculator" type="yaw_offset_calculator.py" output="screen">
-		<param name="output_file" value="$(find tc2025)/config/yaw_offset.yaml" />
-		<param name="save_interval" value="5.0" />
-		<param name="time_window" value="30.0" />
-	</node>
 
 </launch>

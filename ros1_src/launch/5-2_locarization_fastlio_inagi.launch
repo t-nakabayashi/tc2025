@@ -1,5 +1,8 @@
 <launch>
-	<!-- 注意: conditional_tf_publisher は 3-1_fastlio.launch で起動されます -->
+    <!-- 条件付きTFパブリッシャーノードを起動 -->
+    <node pkg="tc2025" type="conditional_tf_publisher.py" name="conditional_tf_publisher" output="screen">
+		<param name="odom_topic" value="/Odometry" />
+	</node>
 
 	<!-- Launch file for Livox AVIA LiDAR -->
 	<rosparam command="load" file="$(find tc2025)/config/tc2024_mid_local.yaml" />
@@ -19,9 +22,9 @@
 
 	<rosparam param="footprint" ns="/move_base/local_costmap">[[0.05,-0.1], [0.05,0.1], [-0.3,0.1], [-0.3,-0.1]]</rosparam>
 	<rosparam param="footprint" ns="/move_base/global_costmap">[[0.05,-0.1], [0.05,0.1], [-0.3,0.1], [-0.3,-0.1]]</rosparam>
-	<arg name="waypoint_file" default="$(find fast_lio)/PCD/waypoint(lidarGPS220-1100).csv" />
-	<arg name="map_file_move" default="$(find fast_lio)/PCD/scans_cleaned_2d.yaml" />
-	<arg name="pcd_file" default="$(find fast_lio)/PCD/scans_light.pcd" />
+	<arg name="waypoint_file" default="/home/nkb/ros2_ws/src/route_planner/routes/inagi/fixed/fixed_first.csv" />
+	<arg name="map_file_move" default="$(find fast_lio)/PCD/scans.yaml" />
+	<arg name="pcd_file" default="$(find fast_lio)/PCD/scans.pcd" />
 	<node respawn="true" name="map_server_move" pkg="map_server" type="map_server" args="$(arg map_file_move)">
 			<remap from="map" to="/map"/>
 	</node>
@@ -58,14 +61,15 @@
 	  <rosparam command="load" file="$(arg config_file)"/>
 
 	  <node pkg="rviz" type="rviz" name="rviz" args="-d $(find tc2025)/config/mcl_3dl.rviz" />
-
-	  <!-- GPS + Odometry方位 ローカライゼーション -->
-	  <!-- 位置: /ublox/fix → UTM座標 -->
-	  <!-- 方位: /Odometry のヨー角 + yaw_offset（ファイルから自動読み込み） -->
-	  <node pkg="tc2025" type="gps_localization.py" name="gps_localization" output="screen">
-	    <param name="yaw_offset_file" value="$(find tc2025)/config/yaw_offset.yaml" />
+	  <node pkg="mcl_3dl" type="mcl_3dl" name="mcl_3dl" output="screen" unless="$(arg generate_test_bag)">
+	    <param name="compatible" value="1" />
+	    <remap from="/imu/data" to="/mid360/livox/imu_new" />
+	    <remap from="/odom" to="/Odometry" />
+	    <!--remap from="/cloud" to="/mid360/livox/lidar" /-->
+		<!--remap from="/cloud" to="/velodyne_points" /-->
+		<remap from="/cloud" to="/merged_points" />
 	  </node>
-
+	  
 	  <node pkg="obj_to_pointcloud" type="obj_to_pointcloud" name="obj_to_pointcloud"
 	      if="$(arg use_cad_map)">
 	    <param name="objs" value="$(arg map_objs)" />
@@ -90,6 +94,19 @@
 	    <param name="ang_interval" value="100.0" />
 	  </node>
 
+	<node pkg="move_base" type="move_base" respawn="false" name="move_base">
+		<rosparam file="$(find tc2025)/config/move_base.yaml" command="load" />
+		<rosparam file="$(find tc2025)/config/costmap_common.yaml" command="load" ns="global_costmap" />
+		<rosparam file="$(find tc2025)/config/costmap_common.yaml" command="load" ns="local_costmap" />
+		<rosparam file="$(find tc2025)/config/costmap_local.yaml" command="load" />
+		<rosparam file="$(find tc2025)/config/costmap_global.yaml" command="load" />
+		<rosparam file="$(find tc2025)/config/planner_local.yaml" command="load" />
+		<rosparam file="$(find tc2025)/config/planner_global.yaml" command="load" />
+		<remap from="cmd_vel" to="ypspur_ros/cmd_vel_move" />
+    	<remap from="odom" to="ypspur_ros/odom" />
+		<!--remap from="map" to="map_move" /-->
+	</node>
+
 
 	<!--node pkg="tc2025" name="waypoint_manager" type="waypoint_manager.py">
 		<param name="start_num"	value="0"/>
@@ -112,6 +129,16 @@
 	<node pkg="tc2025" name="marge_lidar_data" type="marge_lidar_data.py">
 	</node>
 
+	<!-- GPS Pose Estimator GUI -->
+	<node pkg="tc2025" name="gps_pose_estimator" type="gps_pose_estimator.py" output="screen">
+	</node>
 
+	<!-- Yaw Offset Calculator -->
+	<!-- /Odometryと/amcl_poseの偏差を計算し、5秒ごとにファイルに保存 -->
+	<node pkg="tc2025" name="yaw_offset_calculator" type="yaw_offset_calculator.py" output="screen">
+		<param name="output_file" value="$(find tc2025)/config/yaw_offset.yaml" />
+		<param name="save_interval" value="5.0" />
+		<param name="time_window" value="30.0" />
+	</node>
 
 </launch>

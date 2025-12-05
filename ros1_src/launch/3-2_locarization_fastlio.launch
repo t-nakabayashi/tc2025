@@ -1,8 +1,5 @@
 <launch>
-    <!-- 条件付きTFパブリッシャーノードを起動 -->
-    <node pkg="tc2025" type="conditional_tf_publisher.py" name="conditional_tf_publisher" output="screen">
-		<param name="odom_topic" value="/Odometry" />
-	</node>
+	<!-- 注意: conditional_tf_publisher は 3-1_fastlio.launch で起動されます -->
 
 	<!-- Launch file for Livox AVIA LiDAR -->
 	<rosparam command="load" file="$(find tc2025)/config/tc2024_mid_local.yaml" />
@@ -129,16 +126,12 @@
 	<node pkg="tc2025" name="marge_lidar_data" type="marge_lidar_data.py">
 	</node>
 
-	<!-- GPS Pose Estimator GUI -->
-	<node pkg="tc2025" name="gps_pose_estimator" type="gps_pose_estimator.py" output="screen">
-	</node>
 
 	<!-- Yaw Offset Calculator -->
-	<!-- /Odometryと/amcl_poseの偏差を計算し、5秒ごとにファイルに保存 -->
+	<!-- /Odometryと/amcl_poseの偏差を計算し、起動後60秒のデータを収集して一度だけ保存 -->
 	<node pkg="tc2025" name="yaw_offset_calculator" type="yaw_offset_calculator.py" output="screen">
 		<param name="output_file" value="$(find tc2025)/config/yaw_offset.yaml" />
-		<param name="save_interval" value="5.0" />
-		<param name="time_window" value="30.0" />
+		<param name="collection_time" value="60.0" />
 	</node>
 
 </launch>

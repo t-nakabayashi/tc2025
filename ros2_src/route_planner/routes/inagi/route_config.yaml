@@ -1,9 +1,5 @@
 blocks:
-  - type: variable
-    name: "20250920"
-    nodes_file: "variable/nodes.csv"
-    edges_file: "variable/edges.csv"
-    start: "C0"
-    goal: "C4"
-    checkpoints:
-      - "C1"
+  - type: fixed
+    name: "20251018"
+    segment_id: "fixed/fixed_first.csv"
+
