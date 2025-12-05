@@ -81,7 +81,8 @@ class RobotSimulatorNode(Node):
         self.declare_parameter('glitch_trigger_topic', '/amcl_glitch_trigger')
         self.declare_parameter('glitch_cooldown_sec', 5.0)
         self.declare_parameter('glitch_wait_after_stop_sec', 5.0)
-        self.declare_parameter('glitch_radius_m', 1.0)
+        self.declare_parameter('glitch_radius_min_m', 1.0)
+        self.declare_parameter('glitch_radius_max_m', 2.0)
         self.declare_parameter('glitch_yaw_std_deg', 5.0)
         self.declare_parameter('glitch_cov_floor_m2', 0.25)
         self.declare_parameter('glitch_yaw_cov_floor_deg2', 25.0)
@@ -110,7 +111,12 @@ class RobotSimulatorNode(Node):
         self._glitch_wait_after_stop_sec: float = float(
             self.get_parameter('glitch_wait_after_stop_sec').value
         )
-        self._glitch_radius_m: float = float(self.get_parameter('glitch_radius_m').value)
+        self._glitch_radius_min_m: float = float(
+            self.get_parameter('glitch_radius_min_m').value
+        )
+        self._glitch_radius_max_m: float = float(
+            self.get_parameter('glitch_radius_max_m').value
+        )
         self._glitch_yaw_std_deg: float = float(self.get_parameter('glitch_yaw_std_deg').value)
         self._glitch_cov_floor_m2: float = float(self.get_parameter('glitch_cov_floor_m2').value)
         self._glitch_yaw_cov_floor_deg2: float = float(self.get_parameter('glitch_yaw_cov_floor_deg2').value)
@@ -142,6 +148,15 @@ class RobotSimulatorNode(Node):
         self._pending_glitch_ready_time: Optional[float] = None
         self._glitch_trigger_reserved = False
         self._last_glitch_time = 0.0
+
+        if self._glitch_radius_min_m > self._glitch_radius_max_m:
+            self.get_logger().warn(
+                'glitch_radius_min_m が glitch_radius_max_m より大きいため値を入れ替えます。'
+            )
+            self._glitch_radius_min_m, self._glitch_radius_max_m = (
+                self._glitch_radius_max_m,
+                self._glitch_radius_min_m,
+            )
 
         # --- 初期AMCL姿勢保持（map→odom変換） ---
         self._amcl_origin_received = False
@@ -452,8 +467,9 @@ class RobotSimulatorNode(Node):
 
     def _generate_glitch_offset(self) -> tuple[float, float, float]:
         angle = random.uniform(-math.pi, math.pi)
-        dx = self._glitch_radius_m * math.cos(angle)
-        dy = self._glitch_radius_m * math.sin(angle)
+        radius = random.uniform(self._glitch_radius_min_m, self._glitch_radius_max_m)
+        dx = radius * math.cos(angle)
+        dy = radius * math.sin(angle)
         dyaw = math.radians(random.gauss(0.0, self._glitch_yaw_std_deg))
         return dx, dy, dyaw
 
