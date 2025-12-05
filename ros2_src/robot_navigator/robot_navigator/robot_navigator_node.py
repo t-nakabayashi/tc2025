@@ -168,8 +168,6 @@ class RobotNavigator(Node):
         self._road_block_release_candidate_stamp: Optional[Tuple[int, int]] = None
         # 位置許容範囲へ入ったことをヒステリシス付きで保持するフラグ。
         self._within_goal_pos_tolerance: bool = False
-        # 目標角度の許容範囲へ入ったことを保持するフラグ。
-        self._within_goal_ang_tolerance: bool = False
 
         # --- Publisher/Subscriber の設定 ---
         # /cmd_vel は Reliable/Volatile で十分
@@ -286,7 +284,6 @@ class RobotNavigator(Node):
             self.integral_w = 0.0
             self.prev_yaw_error = 0.0
             self._within_goal_pos_tolerance = False
-            self._within_goal_ang_tolerance = False
 
         if self._road_block_active and stamp_changed:
             # road_blocked 停止明けは header.stamp が変化した指示のみ解除候補とみなす。
@@ -612,30 +609,24 @@ class RobotNavigator(Node):
         dy = ty - cy
         distance_error = math.hypot(dx, dy)
 
-        if not self._within_goal_pos_tolerance and distance_error <= self.pos_tol:
-            # 位置許容内に初めて入ったタイミングでフラグを設定する。
-            # フラグの解除は新しい active_target を受信した際にのみ行う。
-            self._within_goal_pos_tolerance = True
+        if self._within_goal_pos_tolerance:
+            if distance_error >= self.pos_tol + self.pos_tol_exit_margin:
+                self._within_goal_pos_tolerance = False
+        else:
+            if distance_error <= self.pos_tol:
+                self._within_goal_pos_tolerance = True
+
+        within_pos_tolerance = self._within_goal_pos_tolerance
 
         # 目標姿勢ではなく、目標位置へのベアリングで方向誤差を求める。
         # 旧ROS1実装同様、位置到達前に目標姿勢のヨー角を使うと、
         # ゴールを通過した際に進行方向を維持したまま離脱してしまう。
         target_bearing = math.atan2(dy, dx)
-        within_pos_tolerance = self._within_goal_pos_tolerance
         if within_pos_tolerance:
             yaw_error = self.normalize_angle(target_yaw - current_yaw)
         else:
             yaw_error = self.normalize_angle(target_bearing - current_yaw)
         angle_diff = abs(yaw_error)
-
-        if (
-            within_pos_tolerance
-            and not self._within_goal_ang_tolerance
-            and abs(yaw_error) <= self.ang_tol
-        ):
-            # 位置許容内で姿勢誤差も許容範囲に入ったタイミングでフラグを設定する。
-            # フラグの解除は新しい active_target を受信した際にのみ行う。
-            self._within_goal_ang_tolerance = True
 
         # --- 角速度（PID + アンチワインドアップ）---
         prev_error = self.prev_yaw_error
@@ -700,12 +691,6 @@ class RobotNavigator(Node):
                 scale = (self.obstacle_distance - self.min_obstacle_distance) / denom
                 scale = max(0.0, min(1.0, scale))
                 v_scaled *= scale
-
-        if self._within_goal_ang_tolerance:
-            # 位置許容内で角度許容に入った後のみ角速度を停止する。
-            # 障害物検知での停止など、位置許容外のケースには影響しない。
-            w_desired = 0.0
-            self.integral_w = 0.0
 
         # 最大速度再チェック
         v_scaled = max(0.0, min(self.max_v, v_scaled))
