@@ -21,7 +21,7 @@ from rclpy.qos import QoSProfile
 
 from geometry_msgs.msg import Twist, PoseWithCovarianceStamped, PoseStamped, Quaternion, TransformStamped
 from nav_msgs.msg import Odometry
-from std_msgs.msg import Header
+from std_msgs.msg import Bool, Header
 from tf2_ros import TransformBroadcaster
 
 
@@ -77,6 +77,16 @@ class RobotSimulatorNode(Node):
         self.declare_parameter('enable_cmd_limit', True)
         self.declare_parameter('pose_noise_std_m', 0.0)
         self.declare_parameter('yaw_noise_std_deg', 0.0)
+        self.declare_parameter('enable_glitch_trigger', True)
+        self.declare_parameter('glitch_trigger_topic', '/amcl_glitch_trigger')
+        self.declare_parameter('glitch_cooldown_sec', 5.0)
+        self.declare_parameter('glitch_wait_after_stop_sec', 5.0)
+        self.declare_parameter('glitch_radius_m', 1.0)
+        self.declare_parameter('glitch_yaw_std_deg', 5.0)
+        self.declare_parameter('glitch_cov_floor_m2', 0.25)
+        self.declare_parameter('glitch_yaw_cov_floor_deg2', 25.0)
+        self.declare_parameter('glitch_linear_stop_threshold', 0.02)
+        self.declare_parameter('glitch_angular_stop_threshold', 0.02)
         self.declare_parameter('publish_tf', True)
         self.declare_parameter('frame_map', 'map')
         self.declare_parameter('frame_odom', 'odom')
@@ -94,6 +104,22 @@ class RobotSimulatorNode(Node):
         self._enable_limit: bool = bool(self.get_parameter('enable_cmd_limit').value)
         self._pose_noise_std_m: float = float(self.get_parameter('pose_noise_std_m').value)
         self._yaw_noise_std_deg: float = float(self.get_parameter('yaw_noise_std_deg').value)
+        self._enable_glitch_trigger: bool = bool(self.get_parameter('enable_glitch_trigger').value)
+        self._glitch_trigger_topic: str = str(self.get_parameter('glitch_trigger_topic').value)
+        self._glitch_cooldown_sec: float = float(self.get_parameter('glitch_cooldown_sec').value)
+        self._glitch_wait_after_stop_sec: float = float(
+            self.get_parameter('glitch_wait_after_stop_sec').value
+        )
+        self._glitch_radius_m: float = float(self.get_parameter('glitch_radius_m').value)
+        self._glitch_yaw_std_deg: float = float(self.get_parameter('glitch_yaw_std_deg').value)
+        self._glitch_cov_floor_m2: float = float(self.get_parameter('glitch_cov_floor_m2').value)
+        self._glitch_yaw_cov_floor_deg2: float = float(self.get_parameter('glitch_yaw_cov_floor_deg2').value)
+        self._glitch_linear_stop_threshold: float = float(
+            self.get_parameter('glitch_linear_stop_threshold').value
+        )
+        self._glitch_angular_stop_threshold: float = float(
+            self.get_parameter('glitch_angular_stop_threshold').value
+        )
         self._enable_tf_pub: bool = bool(self.get_parameter('publish_tf').value)
         self._frame_map: str = str(self.get_parameter('frame_map').value)
         self._frame_odom: str = str(self.get_parameter('frame_odom').value)
@@ -112,6 +138,10 @@ class RobotSimulatorNode(Node):
         self._odom_accum_ms = 0.0
         self._odom_period_s = max(0.01, float(self._odom_period_ms) / 1000.0)
         self._last_wait_log = 0.0
+        self._pending_glitch: Optional[tuple[float, float, float]] = None
+        self._pending_glitch_ready_time: Optional[float] = None
+        self._glitch_trigger_reserved = False
+        self._last_glitch_time = 0.0
 
         # --- 初期AMCL姿勢保持（map→odom変換） ---
         self._amcl_origin_received = False
@@ -130,6 +160,15 @@ class RobotSimulatorNode(Node):
         self._sub_cmd = self.create_subscription(Twist, '/cmd_vel', self._on_cmd_vel, qos)
         self._sub_amcl = self.create_subscription(PoseWithCovarianceStamped, '/amcl_pose', self._on_amcl_origin, qos)
         self._sub_active_target = self.create_subscription(PoseStamped, '/active_target', self._on_active_target, qos)
+        if self._enable_glitch_trigger:
+            self._sub_glitch = self.create_subscription(
+                Bool,
+                self._glitch_trigger_topic,
+                self._on_glitch_trigger,
+                QoSProfile(depth=10),
+            )
+        else:
+            self._sub_glitch = None
 
         # --- タイマ ---
         self._timer_update = self.create_timer(self._dt, self._on_timer_update)
@@ -212,6 +251,38 @@ class RobotSimulatorNode(Node):
             f"Initial pose set from first /active_target: x={x:.2f}, y={y:.2f}, yaw={math.degrees(yaw):.1f}°"
         )
 
+    def _on_glitch_trigger(self, msg: Bool) -> None:
+        """停止時に外部トリガで単発オフセットを予約する。"""
+        if not msg.data:
+            self.get_logger().debug('Glitch trigger is false → ignored.')
+            return
+
+        if not self._initial_pose_set:
+            self.get_logger().warn('Glitch trigger ignored because initial pose is not set yet.')
+            return
+
+        now = time.time()
+        if now - self._last_glitch_time < self._glitch_cooldown_sec:
+            remaining = self._glitch_cooldown_sec - (now - self._last_glitch_time)
+            self.get_logger().info(
+                f'Glitch trigger ignored due to cooldown (remaining={remaining:.1f}s).'
+            )
+            return
+
+        if self._pending_glitch is not None or self._glitch_trigger_reserved:
+            self.get_logger().info('Glitch trigger ignored because a pending glitch exists.')
+            return
+
+        self._last_glitch_time = now
+        if self._is_robot_stopped():
+            self._reserve_glitch(now, 'triggered during stop')
+        else:
+            self._glitch_trigger_reserved = True
+            self.get_logger().info(
+                'Glitch trigger reserved because the robot is moving; will schedule after stop '
+                f'and wait {self._glitch_wait_after_stop_sec:.1f}s before applying.'
+            )
+
     def _on_timer_update(self) -> None:
         now = time.time()
         if not self._initial_pose_set:
@@ -239,6 +310,10 @@ class RobotSimulatorNode(Node):
             self._publish_amcl_pose()
             if self._enable_tf_pub and self._tf_broadcaster is not None:
                 self._publish_tf()
+
+        if self._glitch_trigger_reserved and self._is_robot_stopped():
+            self._glitch_trigger_reserved = False
+            self._reserve_glitch(time.time(), 'trigger released after stop')
 
     # ------------------------------
     # Publish helpers
@@ -286,16 +361,49 @@ class RobotSimulatorNode(Node):
         y += ny
         yaw = normalize_angle(yaw + nyaw)
 
+        cov_x = max(1e-4, self._pose_noise_std_m ** 2)
+        cov_yaw = max(1e-3, math.radians(max(1e-3, self._yaw_noise_std_deg)) ** 2)
+
         msg.pose.pose.position.x = x
         msg.pose.pose.position.y = y
         msg.pose.pose.orientation = yaw_to_quaternion(yaw)
 
         cov = [0.0] * 36
-        cov[0] = cov[7] = max(1e-4, self._pose_noise_std_m ** 2)
-        cov[35] = max(1e-3, math.radians(max(1e-3, self._yaw_noise_std_deg)) ** 2)
+        cov[0] = cov[7] = cov_x
+        cov[35] = cov_yaw
         msg.pose.covariance = cov
 
         self._last_published_amcl_stamp = (stamp.sec, stamp.nanosec)
+
+        if self._pending_glitch is not None:
+            ready = self._pending_glitch_ready_time is None or (
+                time.time() >= self._pending_glitch_ready_time
+            )
+            if ready and self._is_robot_stopped():
+                dx, dy, dyaw = self._pending_glitch
+                msg.pose.pose.position.x += dx
+                msg.pose.pose.position.y += dy
+                yaw_with_glitch = normalize_angle(yaw + dyaw)
+                msg.pose.pose.orientation = yaw_to_quaternion(yaw_with_glitch)
+
+                cov_x = max(cov_x, self._glitch_cov_floor_m2)
+                cov_yaw_floor = math.radians(math.sqrt(self._glitch_yaw_cov_floor_deg2)) ** 2
+                cov_yaw = max(cov_yaw, cov_yaw_floor)
+                cov[0] = cov[7] = cov_x
+                cov[35] = cov_yaw
+                msg.pose.covariance = cov
+
+                self._pending_glitch = None
+                self._pending_glitch_ready_time = None
+                self.get_logger().info(
+                    f'Glitch offset applied: dx={dx:.2f}m, dy={dy:.2f}m, '
+                    f'dyaw={math.degrees(dyaw):.1f}°'
+                )
+            else:
+                self.get_logger().debug('Glitch offset pending until stop/wait period is satisfied.')
+                self._pub_amcl.publish(msg)
+                return
+
         self._pub_amcl.publish(msg)
 
     def _publish_tf(self) -> None:
@@ -326,6 +434,28 @@ class RobotSimulatorNode(Node):
         t_odom_base.transform.rotation = yaw_to_quaternion(self._state.yaw)
 
         self._tf_broadcaster.sendTransform([t_map_odom, t_odom_base])
+
+    def _is_robot_stopped(self) -> bool:
+        return (
+            abs(self._state.v) <= self._glitch_linear_stop_threshold
+            and abs(self._state.w) <= self._glitch_angular_stop_threshold
+        )
+
+    def _reserve_glitch(self, trigger_time: float, reason: str) -> None:
+        dx, dy, dyaw = self._generate_glitch_offset()
+        self._pending_glitch = (dx, dy, dyaw)
+        self._pending_glitch_ready_time = trigger_time + self._glitch_wait_after_stop_sec
+        self.get_logger().info(
+            f'Glitch offset reserved ({reason}): dx={dx:.2f}m, dy={dy:.2f}m, '
+            f'dyaw={math.degrees(dyaw):.1f}°, wait={self._glitch_wait_after_stop_sec:.1f}s'
+        )
+
+    def _generate_glitch_offset(self) -> tuple[float, float, float]:
+        angle = random.uniform(-math.pi, math.pi)
+        dx = self._glitch_radius_m * math.cos(angle)
+        dy = self._glitch_radius_m * math.sin(angle)
+        dyaw = math.radians(random.gauss(0.0, self._glitch_yaw_std_deg))
+        return dx, dy, dyaw
 
 
 def main(args: Optional[list[str]] = None) -> None:
