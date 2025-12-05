@@ -128,11 +128,16 @@ def ros_route_to_core(route: Route) -> RouteModel:
     route_image = _image_msg_to_route_image_data(getattr(route, "route_image", None))
     has_image = route_image is not None
     for wp in getattr(route, "waypoints", []):
+        orientation = getattr(getattr(wp, "pose", None), "orientation", None)
         w = WaypointLite(
             label=str(getattr(wp, "label", "")),
             pose=Pose2D(
                 x=float(getattr(getattr(wp, "pose", None).position, "x", 0.0)),
                 y=float(getattr(getattr(wp, "pose", None).position, "y", 0.0)),
+                orientation_x=float(getattr(orientation, "x", 0.0)),
+                orientation_y=float(getattr(orientation, "y", 0.0)),
+                orientation_z=float(getattr(orientation, "z", 0.0)),
+                orientation_w=float(getattr(orientation, "w", 1.0)),
             ),
             line_stop=bool(getattr(wp, "line_stop", False)),
             signal_stop=bool(getattr(wp, "signal_stop", False)),
@@ -206,6 +211,11 @@ def core_route_to_ros(route: RouteModel) -> Route:
             wp.right_open = float(w.right_open)
             wp.left_open = float(w.left_open)
             wp.segment_is_fixed = bool(w.segment_is_fixed)
+            # 方位（planner由来のクォータニオンを維持する）
+            wp.pose.orientation.x = float(getattr(w.pose, "orientation_x", 0.0))
+            wp.pose.orientation.y = float(getattr(w.pose, "orientation_y", 0.0))
+            wp.pose.orientation.z = float(getattr(w.pose, "orientation_z", 0.0))
+            wp.pose.orientation.w = float(getattr(w.pose, "orientation_w", 1.0))
         except Exception:
             pass
         msg.waypoints.append(wp)
@@ -591,9 +601,14 @@ class RouteManagerNode(Node):
             self._last_report_pose = None
         pose_field = getattr(pose_msg, "pose", None)
         position = getattr(pose_field, "position", None)
+        orientation = getattr(pose_field, "orientation", None)
         pose2d = Pose2D(
             x=float(getattr(position, "x", 0.0)),
             y=float(getattr(position, "y", 0.0)),
+            orientation_x=float(getattr(orientation, "x", 0.0)),
+            orientation_y=float(getattr(orientation, "y", 0.0)),
+            orientation_z=float(getattr(orientation, "z", 0.0)),
+            orientation_w=float(getattr(orientation, "w", 1.0)),
         )
         report = StuckReport(
             route_version=int(getattr(req, "route_version", 0)),

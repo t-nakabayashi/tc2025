@@ -78,9 +78,13 @@ class VersionMM:
 
 @dataclass
 class Pose2D:
-    """2D位置（最小限）。"""
+    """2D位置（方位を含む最小限の姿勢表現）。"""
     x: float = 0.0
     y: float = 0.0
+    orientation_x: float = 0.0
+    orientation_y: float = 0.0
+    orientation_z: float = 0.0
+    orientation_w: float = 1.0
 
 
 @dataclass
@@ -456,7 +460,14 @@ class RouteManagerCore:
         self._last_stuck_report = report
         self.current_index = int(report.current_index)
         self.current_label = str(report.current_label or "")
-        self._last_known_pose = Pose2D(x=float(report.current_pose.x), y=float(report.current_pose.y))
+        self._last_known_pose = Pose2D(
+            x=float(report.current_pose.x),
+            y=float(report.current_pose.y),
+            orientation_x=float(getattr(report.current_pose, "orientation_x", 0.0)),
+            orientation_y=float(getattr(report.current_pose, "orientation_y", 0.0)),
+            orientation_z=float(getattr(report.current_pose, "orientation_z", 0.0)),
+            orientation_w=float(getattr(report.current_pose, "orientation_w", 1.0)),
+        )
 
         if self.route_model is not None:
             if int(self.route_model.version.to_int()) != int(report.route_version):

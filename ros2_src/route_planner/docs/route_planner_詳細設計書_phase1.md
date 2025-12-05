@@ -132,8 +132,9 @@
 
 ### 8.2 CSV
 - `nodes.csv` : `id, lat, lon` または `id, x, y`（いずれも**数値**）  
-- `edges.csv` : `source, target, segment_id, reversible`  
-  - `reversible` は `0/1`, `true/false`, `yes/no` を受理  
+- `edges.csv` : `source, target, segment_id, reversible[, weight_factor]`
+  - `reversible` は `0/1`, `true/false`, `yes/no` を受理
+  - `weight_factor` は正の数値。指定時はセグメント長へ係数を掛けた重みを使用
 - **Waypoint CSV（segment）**：`(x,y)` または `(lat,lon)` 形式のいずれかを許容
 
 ---
@@ -264,8 +265,9 @@
 ## 第14章 保守・拡張の留意事項
 
 - `graph_solver` の**入力/出力I/F**（`solve_variable_route()` と `render_route_on_map()` の責務分離）を明確に維持すること
-- `Waypoint` の**index再採番**は**副作用関数**であり、戻り値を用いない前提で実装すること  
-- データ互換：`edges.csv` の `reversible` は複数表記（0/1, true/false, yes/no）を許容  
+- `Waypoint` の**index再採番**は**副作用関数**であり、戻り値を用いない前提で実装すること
+- データ互換：`edges.csv` の `reversible` は複数表記（0/1, true/false, yes/no）を許容
+- データ互換：`weight_factor` 未指定時は 1.0 と同等に扱い、既存 CSV との下位互換性を維持する
 - 画像ファイル名は `graph_solver.render_route_on_map()` の `route_image_output_path` 指定に依存する（未指定時はメモリ上で完結）。
 
 ---

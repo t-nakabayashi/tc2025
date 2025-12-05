@@ -2,7 +2,7 @@ route_manager:
   ros__parameters:
     start_label: ""
     goal_label: ""
-    checkpoint_labels: ["C1","C9","C16"]
+    checkpoint_labels: ["C2","C7","C18"]
     planner_timeout_sec: 5.0
     planner_retry_count: 2
     planner_connect_timeout_sec: 10.0

@@ -46,6 +46,10 @@ class Pose:
     x: float
     y: float
     yaw: float = 0.0
+    orientation_x: float | None = None
+    orientation_y: float | None = None
+    orientation_z: float | None = None
+    orientation_w: float | None = None
 
 
 @dataclass
@@ -764,6 +768,12 @@ class FollowerCore:
         if self.route and 0 <= self.index < len(self.route.waypoints):
             return self.route.waypoints[self.index].label
         return ""
+
+    def get_current_waypoint(self) -> Optional[Waypoint]:
+        """現在追従中のウェイポイントを返す。"""
+        if self.route and 0 <= self.index < len(self.route.waypoints):
+            return self.route.waypoints[self.index]
+        return None
 
     def get_current_pose(self) -> Optional[Pose]:
         """現在の自己位置（Pose）を返す。"""

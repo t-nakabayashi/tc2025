@@ -25,6 +25,23 @@ else:
     from .graph_solver import render_route_on_map, solve_variable_route
 
 
+def parse_weight_factor(value: Any) -> float:
+    """edges.csv の重み係数を正の実数として解釈する。"""
+
+    if value is None or str(value).strip() == "":
+        return 1.0
+
+    try:
+        factor = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("edges.csv: weight_factor は正の数値で指定してください。") from exc
+
+    if factor <= 0:
+        raise ValueError("edges.csv: weight_factor は正の数値で指定してください。")
+
+    return factor
+
+
 @dataclass
 class PositionRecord:
     """位置座標を保持するシンプルなデータクラス."""
@@ -95,6 +112,7 @@ class GraphEdgeRecord:
     target: str
     segment_id: str
     reversible: int = 0
+    weight_factor: float = 1.0
 
     def key(self) -> frozenset:
         """エッジ対（無向）を一意に表すキーを返す。"""
@@ -110,6 +128,7 @@ class GraphEdgeRecord:
             "segment_id": self.segment_id,
             "waypoint_list": self.segment_id,
             "reversible": int(self.reversible),
+            "weight_factor": self.weight_factor,
         }
 
 
@@ -141,7 +160,14 @@ class VariableGraphBuilder:
             reversible = int(reversible_raw)
         except (TypeError, ValueError):
             reversible = 0
-        return GraphEdgeRecord(str(src), str(dst), str(seg), 1 if reversible else 0)
+        weight_factor = parse_weight_factor(edge.get("weight_factor", 1.0))
+        return GraphEdgeRecord(
+            str(src),
+            str(dst),
+            str(seg),
+            1 if reversible else 0,
+            weight_factor,
+        )
 
     # ------------------------------------------------------------------
     def replace_edges(self, edges: Iterable[Dict[str, Any]]) -> None:
@@ -183,6 +209,7 @@ class VariableGraphBuilder:
                 and current.target == record.target
                 and current.segment_id == record.segment_id
                 and current.reversible == record.reversible
+                and math.isclose(current.weight_factor, record.weight_factor)
             ):
                 return current
         self._edges.append(record)
@@ -959,6 +986,9 @@ class RouteBuilder:
                             target = row.get("target")
                             seg_rel = row.get("waypoint_list")
                             reversible_raw = row.get("reversible", "1")
+                            weight_factor = parse_weight_factor(
+                                row.get("weight_factor", 1.0)
+                            )
                             if not source or not target or not seg_rel:
                                 raise ValueError(
                                     "edges.csv: source/target/waypoint_list は必須です。"
@@ -973,6 +1003,7 @@ class RouteBuilder:
                                 "target": str(target),
                                 "waypoint_list": seg_rel,
                                 "reversible": reversible,
+                                "weight_factor": weight_factor,
                             }
                             edges.append(edge)
                             seg_path = resolve_path(self.csv_base_dir, seg_rel)
@@ -1017,6 +1048,7 @@ class RouteBuilder:
                     "target": edge.get("target"),
                     "segment_id": seg_abs,
                     "reversible": edge.get("reversible", 0),
+                    "weight_factor": edge.get("weight_factor", 1.0),
                 }
             )
         return solver_edges, abs_to_rel

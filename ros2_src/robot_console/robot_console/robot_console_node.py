@@ -112,6 +112,10 @@ class RobotConsoleNode(Node):
                 self._start_obstacle_override(command.payload)
             elif command.command_type == GuiCommandType.OBSTACLE_HINT_STOP:
                 self._stop_obstacle_override()
+            elif command.command_type == GuiCommandType.START_VISUALIZATION:
+                self._core.start_visualization()
+            elif command.command_type == GuiCommandType.STOP_VISUALIZATION:
+                self._core.stop_visualization()
             else:
                 self._core.handle_command(command)
 
