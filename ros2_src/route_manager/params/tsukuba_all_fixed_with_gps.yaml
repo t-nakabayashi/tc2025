@@ -1,0 +1,12 @@
+froute_manager:
+  ros__parameters:
+    start_label: ""
+    goal_label: ""
+    checkpoint_labels: []
+    planner_timeout_sec: 5.0
+    planner_retry_count: 2
+    planner_connect_timeout_sec: 10.0
+    state_publish_rate_hz: 1.0
+    image_encoding_check: false
+    report_stuck_timeout_sec: 5.0
+    offset_step_max_m: 1.0

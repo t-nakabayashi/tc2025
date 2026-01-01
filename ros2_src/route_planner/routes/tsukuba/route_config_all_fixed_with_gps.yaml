@@ -1,0 +1,11 @@
+blocks:
+  - type: fixed
+    name: "20251018"
+    segment_id: "fixed/fixed_first.csv"
+  - type: fixed
+    name: "20251206"
+    segment_id: "fixed/fixed_park.csv"
+  - type: fixed
+    name: "20251018"
+    segment_id: "fixed/fixed_second.csv"
+

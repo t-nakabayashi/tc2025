@@ -30,7 +30,8 @@ def get_recog_flag():
 def receive_image():
     image_msg = rospy.wait_for_message('/usb_cam/image_raw', Image)
     image = np.frombuffer(image_msg.data, dtype=np.uint8).reshape(image_msg.height, image_msg.width, 3)
-    return image
+    #return image
+    return image.copy()  # ← .copy()を追加
 
 # YOLOv5による物体検出を実行
 def detect_object(image):
@@ -132,13 +133,27 @@ def publish_sig_recog(sig_recog):
     sig_pub = rospy.Publisher('sig_recog', Int32, queue_size=1)
     sig_pub.publish(sig_recog)
 
+
+#def wait_for_recog_flag():
+#    rate = rospy.Rate(5)
+#    while not rospy.is_shutdown():
+#        if get_recog_flag() == 1:
+#            break
+#        image = receive_image()
+#        publish_det_imgs(image)
+#        rate.sleep()
+
 def wait_for_recog_flag():
-    rate = rospy.Rate(5)
+    rate = rospy.Rate(10)  # 頻度を上げる
     while not rospy.is_shutdown():
         if get_recog_flag() == 1:
             break
-        image = receive_image()
-        publish_det_imgs(image)
+        try:
+            image_msg = rospy.wait_for_message('/usb_cam/image_raw', Image, timeout=0.1)
+            image = np.frombuffer(image_msg.data, dtype=np.uint8).reshape(image_msg.height, image_msg.width, 3).copy()
+            publish_det_imgs(image)
+        except rospy.ROSException:
+            pass  # タイムアウト時は何もしない
         rate.sleep()
 
 if __name__ == '__main__':
@@ -146,7 +161,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', '--conf', default=0.80)
     parser.add_argument('-j', '--judge', default=3)
-    args = parser.parse_args()
+    # ROSが渡す引数（__name:=, __log:=など）を無視する
+    args, _ = parser.parse_known_args()
     det_thresh = float(args.conf)
     judge_cnt = int(args.judge)
 
@@ -154,7 +170,7 @@ if __name__ == '__main__':
     rospy.init_node('object_detection')
 
     # YOLOv5で学習されたモデルを読み込む
-    model = torch.hub.load('ultralytics/yolov5', 'custom', path='best.pt')
+    model = torch.hub.load('ultralytics/yolov5', 'custom', path='/home/nkb/ros/tc2025/ros1_src/scripts/best.pt')
     
     # モデルの検出閾値を設定
     model.conf = det_thresh

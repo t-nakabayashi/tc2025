@@ -1,0 +1,6 @@
+route_planner:
+  ros__parameters:
+    config_yaml_path: "routes/tsukuba/route_config_all_fixed.yaml"
+    csv_base_dir: "routes/tsukuba"
+    map_image_path: "routes/tsukuba/map/gsi20250928000333444.png"
+    map_worldfile_path: "routes/tsukuba/map/gsi20250928000333444_corr.pgw"

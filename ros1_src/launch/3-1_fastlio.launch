@@ -9,4 +9,7 @@
 
     <node pkg="fast_lio" type="fastlio_mapping" name="laserMapping" output="screen" />
 
+    <!-- 信号検出ノード（respawn=falseで独立して起動、FAST-LIOに影響しない） -->
+    <node pkg="tc2025" type="tc2023_signal_detector.py" name="signal_detector" output="screen" respawn="false" launch-prefix="bash -c 'sleep 3; exec $0 $@' " />
+
 </launch>
